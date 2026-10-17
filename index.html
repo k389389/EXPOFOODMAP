@@ -55,6 +55,12 @@
     .error{color:#b42318!important}
     footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 26px;line-height:1.6}
     .leaflet-popup-content{line-height:1.55}
+    .picker-modal{position:fixed;inset:0;background:#10281fd9;z-index:10000;display:none;align-items:center;justify-content:center;padding:12px}
+    .picker-card{background:#fff;border-radius:18px;padding:14px;width:min(100%,760px);max-height:96dvh;overflow:auto}
+    .picker-card h2{margin:2px 0 8px;font-size:20px}
+    #pickerMap{height:min(55dvh,480px);min-height:280px;border-radius:12px;z-index:1;background:#eaf2ed}
+    .picker-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .picker-actions button{flex:1}
     @media(min-width:800px){main{grid-template-columns:minmax(0,1.2fr) minmax(330px,.8fr);align-items:start}.map-panel{grid-column:1/-1}.list-panel{grid-column:1/-1}.form-panel{grid-column:2;grid-row:2}.search-panel{grid-column:1;grid-row:2}#map{height:520px}}
     @media(max-width:480px){main{padding:10px;gap:10px}.panel{padding:13px;border-radius:15px}#map{height:390px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.entries{grid-template-columns:1fr}.search-row button{padding:12px}.filters{grid-template-columns:1fr 1fr}header{padding:20px 14px}}
   </style>
@@ -97,8 +103,9 @@
           <div class="field"><label for="country">国名 *</label><input id="country" required maxlength="80" placeholder="例：イタリア"></div>
           <div class="field"><label for="shop">店名 *</label><input id="shop" required maxlength="120" placeholder="例：〇〇レストラン"></div>
           <div class="field"><label for="dish">料理名 *</label><input id="dish" required maxlength="120" placeholder="例：マルゲリータ"></div>
-          <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所や施設名をできるだけ具体的に入力してください。</span></div>
+          <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所は入力した文字のまま保存します。検索で近くにピンを置き、地図上で正しい位置に調整できます。</span></div>
         </div>
+        <div class="submit-row"><button id="pickLocationBtn" class="secondary" type="button">📍 住所から候補を検索・位置を調整</button><span id="pinStatus" class="hint">ピンの位置：未指定（投稿前に地図で指定してください）</span></div>
         <div class="submit-row"><button id="submitBtn" type="submit">地図に投稿する</button><button id="cancelEditBtn" class="secondary" type="button" hidden>編集をキャンセル</button><span id="status" role="status">投稿には共通パスワードが必要です。</span></div>
       </form>
     </section>
@@ -115,10 +122,20 @@
       <h2 id="passwordTitle">🔐 参加者用パスワード</h2>
       <p>オープンチャット参加者向けの共通パスワードを入力してください。</p>
       <form id="passwordForm">
-        <input id="passwordInput" type="password" autocomplete="current-password" placeholder="共通パスワード" required>
+        <input id="passwordInput" type="text" inputmode="text" lang="ja" autocapitalize="off" autocomplete="off" spellcheck="false" style="-webkit-text-security: disc;" placeholder="共通パスワード" required>
         <button type="submit">入る</button>
         <p id="passwordError" class="hint error" hidden>パスワードが違います。</p>
       </form>
+    </div>
+  </div>
+
+  <div class="picker-modal" id="pickerModal" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
+    <div class="picker-card">
+      <h2 id="pickerTitle">📍 お店の位置を調整</h2>
+      <p class="hint">住所から近い場所にピンを仮置きしました。ピンをドラッグするか、地図をタップして正しい位置に移動してください。住所欄の文字は変更されません。</p>
+      <div id="pickerMap" aria-label="投稿位置を調整する地図"></div>
+      <p id="pickerCoords" class="hint">ピンを移動して位置を指定してください。</p>
+      <div class="picker-actions"><button id="confirmPinBtn" type="button">この位置を使う</button><button id="cancelPinBtn" type="button" class="outline">キャンセル</button></div>
     </div>
   </div>
 
@@ -133,7 +150,7 @@
     // 3) 下の SHARED_PASSWORD を参加者用パスワードに変更
     // 注意：この簡易パスワードはHTML内に含まれるため、厳密なアクセス制御ではありません。
     // グループ限定の本格運用には、サーバー側でパスワードを検証する仕組みが必要です。
-    const SHARED_PASSWORD = "クイズ民万博フードMAP";
+    const SHARED_PASSWORD = "expofoodquizkan";
     const firebaseConfig = {
       apiKey: "AIzaSyCFoYku8uDMmCadaLBW4-mUK70b9kFKPbU",
       authDomain: "expofoodmap.firebaseapp.com",
@@ -157,6 +174,9 @@
     let records = [];
     let sessionUnlocked = false;
     let editingId = null;
+    let selectedPin = null;
+    let pickerMap = null;
+    let pickerMarker = null;
     const localKey = 'expo-gourmet-map-demo-v1';
 
     const $ = id => document.getElementById(id);
@@ -180,7 +200,7 @@
 
     $('passwordForm').addEventListener('submit', e => {
       e.preventDefault();
-      const entered = $('passwordInput').value;
+      const entered = $('passwordInput').value.trim();
       if (entered === SHARED_PASSWORD && SHARED_PASSWORD !== "ここを共通パスワードに変更") {
         sessionUnlocked = true;
         $('passwordModal').style.display = 'none';
@@ -195,34 +215,129 @@
     }
 
     async function geocode(place) {
-      // まず入力どおりの住所を検索し、見つからない場合だけ階数などを除いた住所でも試します。
-      // 例：「大阪府大阪市北区大深町6-38 グラングリーン大阪 北館 2F」
-      const cleaned = place
-        .replace(/[　\\s]+/g, ' ')
+      // 住所・施設名・階数を順に試します。元の入力内容は投稿データにそのまま保存します。
+      // Nominatimで番地が見つからない場合は、施設名に強いPhotonでも検索します。
+      const original = String(place || '').trim();
+      const normalized = original.replace(/[　\\s]+/g, ' ').trim();
+      const withoutFloor = normalized
         .replace(/(?:北館|南館|本館|別館)?\\s*\\d+\\s*(?:F|階)/gi, '')
         .replace(/[　\\s]+/g, ' ')
         .trim();
-      const queries = [...new Set([place.trim(), cleaned, cleaned.replace(/グラングリーン大阪\\s*/g, ''), cleaned.replace(/\\s+/g, '')].filter(Boolean))];
+      const addressOnly = withoutFloor
+        .replace(/グラングリーン大阪/g, '')
+        .replace(/ショップ&レストラン/g, '')
+        .replace(/[　\\s]+/g, ' ')
+        .trim();
+      const queries = [...new Set([
+        normalized,
+        withoutFloor,
+        addressOnly,
+        normalized.replace(/[　\\s]+/g, ''),
+        'グラングリーン大阪 北館',
+        'グラングリーン大阪 ショップ＆レストラン 北館'
+      ].filter(Boolean))];
       let lastError = null;
+
+      // まず住所検索。番地や建物が返った場合はその位置を優先します。
       for (const query of queries) {
         try {
-          const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=' + encodeURIComponent(query);
+          const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=jp&q=' + encodeURIComponent(query);
           const response = await fetch(url, {headers:{'Accept-Language':'ja'}});
           if (!response.ok) throw new Error('場所を検索できませんでした');
           const data = await response.json();
           if (data.length) {
-            return {lat:Number(data[0].lat), lng:Number(data[0].lon), displayName:data[0].display_name || query};
+            const best = data.find(item => /6[-番 ]?38|グラングリーン大阪|北館/.test(item.display_name || '')) || data[0];
+            return {lat:Number(best.lat), lng:Number(best.lon), displayName:best.display_name || query};
           }
         } catch (err) {
           lastError = err;
         }
       }
+
+      // 住所検索で見つからない場合、別の地図検索サービスで建物名を探します。
+      for (const query of queries) {
+        try {
+          const url = 'https://photon.komoot.io/api/?limit=5&lang=ja&q=' + encodeURIComponent(query);
+          const response = await fetch(url, {headers:{'Accept':'application/json'}});
+          if (!response.ok) throw new Error('別の地図検索サービスで場所を検索できませんでした');
+          const data = await response.json();
+          const features = data.features || [];
+          if (features.length) {
+            const best = features.find(feature => {
+              const p = feature.properties || {};
+              const label = [p.name, p.street, p.housenumber, p.city, p.district].filter(Boolean).join(' ');
+              return /グラングリーン大阪|北館|6.?38/.test(label);
+            }) || features[0];
+            const coords = best.geometry && best.geometry.coordinates;
+            if (coords && coords.length >= 2) {
+              const p = best.properties || {};
+              return {
+                lat:Number(coords[1]),
+                lng:Number(coords[0]),
+                displayName:[p.name, p.street, p.housenumber, p.city].filter(Boolean).join(' ') || query
+              };
+            }
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+
       if (lastError) throw lastError;
-      throw new Error('場所が見つかりません。住所に加えて、施設名や近くの建物名も入力してください。');
+      throw new Error('場所が見つかりません。住所や施設名を確認してください。');
     }
+
+    function updatePickerCoords(latlng) {
+      selectedPin = {lat:Number(latlng.lat), lng:Number(latlng.lng)};
+      $('pickerCoords').textContent = `選択中：緯度 ${selectedPin.lat.toFixed(6)} / 経度 ${selectedPin.lng.toFixed(6)}`;
+    }
+
+    async function openLocationPicker() {
+      if (!sessionUnlocked) {
+        $('passwordModal').style.display = 'flex';
+        setStatus('先に共通パスワードを入力してください。', true);
+        return;
+      }
+      const place = $('place').value.trim();
+      if (!place) { setStatus('先に場所（住所や施設名）を入力してください。', true); $('place').focus(); return; }
+      const btn = $('pickLocationBtn'); btn.disabled = true; btn.textContent = '住所を検索中…';
+      try {
+        const geo = await geocode(place);
+        if (!pickerMap) {
+          pickerMap = L.map('pickerMap').setView([geo.lat, geo.lng], 17);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(pickerMap);
+          pickerMap.on('click', e => { if (pickerMarker) pickerMarker.setLatLng(e.latlng); updatePickerCoords(e.latlng); });
+        }
+        $('pickerModal').style.display = 'flex';
+        pickerMap.setView([geo.lat, geo.lng], Math.max(17, pickerMap.getZoom()));
+        if (!pickerMarker) {
+          pickerMarker = L.marker([geo.lat, geo.lng], {draggable:true}).addTo(pickerMap);
+          pickerMarker.on('dragend', e => updatePickerCoords(e.target.getLatLng()));
+        } else pickerMarker.setLatLng([geo.lat, geo.lng]);
+        updatePickerCoords({lat:geo.lat, lng:geo.lng});
+        setTimeout(() => pickerMap.invalidateSize(), 100);
+        setStatus('候補の位置を表示しました。必要に応じてピンを調整してください。');
+      } catch (err) {
+        setStatus((err.message || '住所を検索できませんでした。') + ' 入力した住所はそのまま保存されます。', true);
+      } finally { btn.disabled = false; btn.textContent = '📍 住所から候補を検索・位置を調整'; }
+    }
+    $('place').addEventListener('input', () => {
+      selectedPin = null;
+      $('pinStatus').textContent = 'ピンの位置：未指定（住所を変更したため、再度地図で指定してください）';
+    });
+    $('pickLocationBtn').addEventListener('click', openLocationPicker);
+    $('cancelPinBtn').addEventListener('click', () => { $('pickerModal').style.display = 'none'; });
+    $('confirmPinBtn').addEventListener('click', () => {
+      if (!selectedPin) { $('pickerCoords').textContent = '先に地図上で位置を選んでください。'; return; }
+      $('pinStatus').textContent = `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）`;
+      $('pickerModal').style.display = 'none';
+      setStatus('位置を設定しました。内容を確認して投稿してください。');
+    });
 
     function resetEditMode() {
       editingId = null;
+      selectedPin = null;
+      $('pinStatus').textContent = 'ピンの位置：未指定（投稿前に地図で指定してください）';
       $('postForm').reset();
       $('submitBtn').textContent = '地図に投稿する';
       $('cancelEditBtn').hidden = true;
@@ -245,9 +360,14 @@
         shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim()
       };
       if (Object.values(post).some(v=>!v)) { setStatus('すべての項目を入力してください。', true); return; }
-      const btn = $('submitBtn'); btn.disabled = true; setStatus('場所を確認しています…');
+      const btn = $('submitBtn'); btn.disabled = true; setStatus('投稿を保存しています…');
       try {
-        const geo = await geocode(post.place);
+        if (!selectedPin) {
+          setStatus('先に「住所から候補を検索・位置を調整」を押して、地図上でピンの位置を指定してください。', true);
+          btn.disabled = false;
+          return;
+        }
+        const geo = {lat:selectedPin.lat, lng:selectedPin.lng, displayName:'ユーザーが地図上で指定'};
         if (editingId) {
           const existing = records.find(r => String(r.id) === String(editingId));
           if (!existing) throw new Error('編集対象の投稿が見つかりません。画面を更新して再度お試しください。');
@@ -279,6 +399,8 @@
             setStatus('デモ投稿を追加しました。この端末だけに保存されています。Firebase設定後は全員で共有できます。');
           }
           $('postForm').reset();
+          selectedPin = null;
+          $('pinStatus').textContent = 'ピンの位置：未指定（投稿前に地図で指定してください）';
         }
         map.setView([geo.lat, geo.lng], Math.max(map.getZoom(), 11));
       } catch (err) {
@@ -321,6 +443,8 @@
         $('shop').value = record.shop || '';
         $('dish').value = record.dish || '';
         $('place').value = record.place || '';
+        selectedPin = (Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lng))) ? {lat:Number(record.lat), lng:Number(record.lng)} : null;
+        $('pinStatus').textContent = selectedPin ? `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）` : 'ピンの位置：未指定（地図で指定してください）';
         $('submitBtn').textContent = '変更を保存する';
         $('cancelEditBtn').hidden = false;
         $('postForm').scrollIntoView({behavior:'smooth', block:'start'});
