@@ -137,7 +137,8 @@
   <div class="picker-modal" id="pickerModal" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
     <div class="picker-card">
       <h2 id="pickerTitle">📍 お店の位置を調整</h2>
-      <p class="hint">住所から近い場所にピンを仮置きしました。ピンをドラッグするか、地図をタップして正しい位置に移動してください。住所欄の文字は変更されません。</p>
+      <p class="hint">住所から近い場所にピンを仮置きします。下の検索欄で別の住所・町名を検索することもできます。ピンをドラッグするか地図をタップして調整してください。住所欄の文字は変更されません。</p>
+      <div class="search-row" style="margin:10px 0"><input id="pickerSearchInput" type="text" lang="ja" placeholder="住所・町名・施設名を検索"><button id="pickerSearchBtn" type="button" class="secondary">地図で検索</button></div><p id="pickerSearchStatus" class="hint" aria-live="polite"></p>
       <div id="pickerMap" aria-label="投稿位置を調整する地図"></div>
       <p id="pickerCoords" class="hint">ピンを移動して位置を指定してください。</p>
       <div class="picker-actions"><button id="confirmPinBtn" type="button">この位置を使う</button><button id="cancelPinBtn" type="button" class="outline">キャンセル</button></div>
@@ -175,6 +176,7 @@
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     const markerLayer = L.layerGroup().addTo(map);
+    map.on('moveend zoomend', renderMapPins);
     let db = null;
     let records = [];
     let sessionUnlocked = false;
@@ -222,76 +224,50 @@
     }
 
     async function geocode(place) {
-      // 住所・施設名・階数を順に試します。元の入力内容は投稿データにそのまま保存します。
-      // Nominatimで番地が見つからない場合は、施設名に強いPhotonでも検索します。
+      // 完全な住所から検索し、見つからなければ末尾の番地・施設名などを順に外して町名レベルまで検索。
       const original = String(place || '').trim();
-      const normalized = original.replace(/[　\\s]+/g, ' ').trim();
-      const withoutFloor = normalized
-        .replace(/(?:北館|南館|本館|別館)?\\s*\\d+\\s*(?:F|階)/gi, '')
-        .replace(/[　\\s]+/g, ' ')
-        .trim();
-      const addressOnly = withoutFloor
-        .replace(/グラングリーン大阪/g, '')
-        .replace(/ショップ&レストラン/g, '')
-        .replace(/[　\\s]+/g, ' ')
-        .trim();
-      const queries = [...new Set([
-        normalized,
-        withoutFloor,
-        addressOnly,
-        normalized.replace(/[　\\s]+/g, ''),
-        'グラングリーン大阪 北館',
-        'グラングリーン大阪 ショップ＆レストラン 北館'
-      ].filter(Boolean))];
+      const normalized = original.replace(/[　\s]+/g, ' ').trim();
+      const withoutFloor = normalized.replace(/(?:北館|南館|本館|別館)?\s*\d+\s*(?:F|階)/gi, '').replace(/[　\s]+/g, ' ').trim();
+      const queries = [];
+      const add = q => { q = String(q || '').trim(); if (q && !queries.includes(q)) queries.push(q); };
+      add(normalized); add(withoutFloor); add(normalized.replace(/[　\s]+/g, ''));
+      // 空白・建物名などの末尾要素を除去
+      let q = withoutFloor;
+      while (q.length > 4) {
+        const next = q.replace(/[　\s]+[^　\s]+$/, '').replace(/[、,，・-]\s*[^、,，・-]+$/, '').trim();
+        if (!next || next === q) break;
+        add(next); q = next;
+      }
+      // 住所がひと続きの長い文字列でも、町名・市区町村までの前方部分を試す
+      for (const len of [40, 32, 26, 22, 18, 15, 12, 10, 8]) if (normalized.length > len) add(normalized.slice(0, len).trim());
       let lastError = null;
-
-      // まず住所検索。番地や建物が返った場合はその位置を優先します。
       for (const query of queries) {
         try {
-          const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=3&countrycodes=jp&q=' + encodeURIComponent(query);
+          const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=jp&q=' + encodeURIComponent(query);
           const response = await fetch(url, {headers:{'Accept-Language':'ja'}});
-          if (!response.ok) throw new Error('場所を検索できませんでした');
+          if (!response.ok) throw new Error('住所検索に失敗しました');
           const data = await response.json();
           if (data.length) {
-            const best = data.find(item => /6[-番 ]?38|グラングリーン大阪|北館/.test(item.display_name || '')) || data[0];
+            // 短く切り詰めた検索では、候補が日本国内の住所であることを優先
+            const best = data.find(item => /日本|Japan|大阪|東京|京都|兵庫|奈良|和歌山|滋賀/.test(item.display_name || '')) || data[0];
             return {lat:Number(best.lat), lng:Number(best.lon), displayName:best.display_name || query};
           }
-        } catch (err) {
-          lastError = err;
-        }
+        } catch (err) { lastError = err; }
       }
-
-      // 住所検索で見つからない場合、別の地図検索サービスで建物名を探します。
+      // Photonでも同じく、住所の短縮候補を順に検索
       for (const query of queries) {
         try {
-          const url = 'https://photon.komoot.io/api/?limit=5&lang=ja&q=' + encodeURIComponent(query);
-          const response = await fetch(url, {headers:{'Accept':'application/json'}});
-          if (!response.ok) throw new Error('別の地図検索サービスで場所を検索できませんでした');
-          const data = await response.json();
-          const features = data.features || [];
+          const response = await fetch('https://photon.komoot.io/api/?limit=5&lang=ja&q=' + encodeURIComponent(query), {headers:{'Accept':'application/json'}});
+          if (!response.ok) throw new Error('別の地図検索サービスで検索できませんでした');
+          const features = (await response.json()).features || [];
           if (features.length) {
-            const best = features.find(feature => {
-              const p = feature.properties || {};
-              const label = [p.name, p.street, p.housenumber, p.city, p.district].filter(Boolean).join(' ');
-              return /グラングリーン大阪|北館|6.?38/.test(label);
-            }) || features[0];
-            const coords = best.geometry && best.geometry.coordinates;
-            if (coords && coords.length >= 2) {
-              const p = best.properties || {};
-              return {
-                lat:Number(coords[1]),
-                lng:Number(coords[0]),
-                displayName:[p.name, p.street, p.housenumber, p.city].filter(Boolean).join(' ') || query
-              };
-            }
+            const best = features[0], coords = best.geometry && best.geometry.coordinates, p = best.properties || {};
+            if (coords && coords.length >= 2) return {lat:Number(coords[1]), lng:Number(coords[0]), displayName:[p.name,p.street,p.district,p.city].filter(Boolean).join(' ') || query};
           }
-        } catch (err) {
-          lastError = err;
-        }
+        } catch (err) { lastError = err; }
       }
-
       if (lastError) throw lastError;
-      throw new Error('場所が見つかりません。住所や施設名を確認してください。');
+      throw new Error('場所が見つかりません。町名や市区町村までの住所を入力するか、地図を直接動かしてください。');
     }
 
     function updatePickerCoords(latlng) {
@@ -308,6 +284,7 @@
       const place = $('place').value.trim();
       if (!place) { setStatus('先に場所（住所や施設名）を入力してください。', true); $('place').focus(); return; }
       const btn = $('pickLocationBtn'); btn.disabled = true; btn.textContent = '住所を検索中…';
+      $('pickerSearchInput').value = place;
       try {
         const geo = await geocode(place);
         if (!pickerMap) {
@@ -334,6 +311,29 @@
     });
     $('pickLocationBtn').addEventListener('click', openLocationPicker);
     $('cancelPinBtn').addEventListener('click', () => { $('pickerModal').style.display = 'none'; });
+    $('pickerSearchBtn').addEventListener('click', async () => {
+      const query = $('pickerSearchInput').value.trim();
+      if (!query) { $('pickerSearchStatus').textContent = '住所・町名・施設名を入力してください。'; return; }
+      const btn = $('pickerSearchBtn'); btn.disabled = true; btn.textContent = '検索中…';
+      $('pickerSearchStatus').textContent = '住所を検索しています…';
+      try {
+        const geo = await geocode(query);
+        if (!pickerMap) {
+          pickerMap = L.map('pickerMap').setView([geo.lat, geo.lng], 17);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(pickerMap);
+          pickerMap.on('click', e => { if (pickerMarker) pickerMarker.setLatLng(e.latlng); updatePickerCoords(e.latlng); });
+        }
+        pickerMap.setView([geo.lat, geo.lng], 17);
+        if (!pickerMarker) { pickerMarker = L.marker([geo.lat, geo.lng], {draggable:true}).addTo(pickerMap); pickerMarker.on('dragend', e => updatePickerCoords(e.target.getLatLng())); }
+        else pickerMarker.setLatLng([geo.lat, geo.lng]);
+        updatePickerCoords({lat:geo.lat,lng:geo.lng});
+        $('pickerSearchStatus').textContent = '候補：' + geo.displayName + '。必要ならピンを動かしてください。';
+        setTimeout(() => pickerMap.invalidateSize(), 100);
+      } catch (err) { $('pickerSearchStatus').textContent = (err.message || '検索できませんでした') + '。町名までの短い住所もお試しください。'; }
+      finally { btn.disabled = false; btn.textContent = '地図で検索'; }
+    });
+    $('pickerSearchInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('pickerSearchBtn').click(); } });
+
     $('confirmPinBtn').addEventListener('click', () => {
       if (!selectedPin) { $('pickerCoords').textContent = '先に地図上で位置を選んでください。'; return; }
       $('pinStatus').textContent = `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）`;
@@ -419,16 +419,13 @@
       if (!value) return '日時不明';
       const date = new Date(Number(value));
       if (Number.isNaN(date.getTime())) return '日時不明';
-      return date.toLocaleString('ja-JP', {
-        year:'numeric', month:'2-digit', day:'2-digit',
-        hour:'2-digit', minute:'2-digit', hour12:false
-      });
+      return date.toLocaleDateString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit'});
     }
     function popupHTML(r) {
-      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿：${esc(r.nickname)}<br>投稿日時：${esc(formatPostDate(r.createdAt))}`;
+      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿：${esc(r.nickname)}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
     }
     function cardHTML(r) {
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日時：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
 
     async function handleEntryAction(event) {
@@ -502,10 +499,17 @@
       $('allEntries').innerHTML = visibleRecords.length ? visibleRecords.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
       $('loadMoreBtn').hidden = visiblePostCount >= records.length;
       $('listCount').textContent = records.length ? `${visibleRecords.length}件 / 全${records.length}件を表示中` : '';
+      renderMapPins();
+    }
+    // 地図の表示範囲内の投稿だけピンを生成し、パン・ズーム時に表示分を更新
+    function renderMapPins() {
+      if (!map || !markerLayer) return;
       markerLayer.clearLayers();
-      records.forEach(r=>{
-        if (Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng))) {
-          L.marker([Number(r.lat),Number(r.lng)]).bindPopup(popupHTML(r)).addTo(markerLayer);
+      const bounds = map.getBounds();
+      records.forEach(r => {
+        const lat = Number(r.lat), lng = Number(r.lng);
+        if (Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
+          L.marker([lat,lng]).bindPopup(popupHTML(r)).addTo(markerLayer);
         }
       });
     }
