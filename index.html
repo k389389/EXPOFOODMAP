@@ -44,6 +44,8 @@
     .entry{border:1px solid var(--line);border-radius:13px;padding:12px;min-width:0}
     .entry h3{margin:0 0 6px;font-size:16px;overflow-wrap:anywhere}
     .entry p{margin:4px 0;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+    .site-url{overflow-wrap:anywhere;word-break:break-word}
+    .site-url a{overflow-wrap:anywhere;word-break:break-word}
     .entry-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
     .entry-actions button{padding:8px 11px;font-size:12px}
     .entry-actions .delete-entry{background:#a83232;color:#fff}
@@ -448,12 +450,12 @@
     }
     function popupHTML(r) {
       const url = safeSiteUrl(r.siteUrl);
-      const site = url ? `<br>🌐 <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">お店のサイト</a>` : '';
+      const site = url ? `<br>🌐 お店のサイト：<br><a class="site-url" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>` : '';
       return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}${site}<br>投稿：${esc(r.nickname)}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
     }
     function cardHTML(r) {
       const url = safeSiteUrl(r.siteUrl);
-      const site = url ? `<p><strong>サイト：</strong><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">お店のサイトを開く ↗</a></p>` : '';
+      const site = url ? `<p><strong>お店のサイトURL：</strong><br><a class="site-url" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></p>` : '';
       return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${site}<p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
 
