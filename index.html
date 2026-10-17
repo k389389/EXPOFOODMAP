@@ -1,0 +1,268 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#f6fbf7">
+  <title>クイズ民万博フードMAP</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <style>
+    :root{--green:#147d58;--green2:#e5f5ec;--ink:#19342b;--muted:#63776e;--line:#dce8e1;--paper:#fff;--bg:#f5faf7;--orange:#f5a623}
+    *{box-sizing:border-box}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif}
+    header{background:linear-gradient(135deg,#0f684b,#2da777);color:#fff;padding:24px 16px 22px}
+    .head-inner{max-width:1100px;margin:auto}
+    .eyebrow{font-size:12px;letter-spacing:.12em;opacity:.9;font-weight:700}
+    h1{font-size:clamp(25px,5vw,38px);margin:6px 0 8px;line-height:1.2}
+    header p{margin:0;line-height:1.6;font-size:14px;opacity:.95}
+    main{max-width:1100px;margin:0 auto;padding:16px;display:grid;gap:16px}
+    .panel{background:var(--paper);border:1px solid var(--line);border-radius:18px;padding:16px;box-shadow:0 4px 18px #19342b08}
+    .section-title{display:flex;align-items:center;gap:8px;margin:0 0 12px;font-size:18px}
+    .search-row{display:flex;gap:8px}
+    input,select,button{font:inherit}
+    input,select{width:100%;min-width:0;border:1px solid #cbdcd2;border-radius:11px;padding:12px;background:#fff;color:var(--ink);outline:none}
+    input:focus,select:focus{border-color:var(--green);box-shadow:0 0 0 3px #147d581a}
+    button{border:0;border-radius:11px;padding:12px 16px;background:var(--green);color:#fff;font-weight:700;cursor:pointer}
+    button:disabled{opacity:.55;cursor:wait}
+    button.secondary{background:var(--green2);color:var(--green)}
+    button.outline{background:#fff;border:1px solid var(--line);color:var(--ink)}
+    .filters{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px}
+    #map{height:440px;width:100%;border-radius:14px;z-index:1;background:#eaf2ed}
+    .map-caption{font-size:12px;color:var(--muted);margin:10px 2px 0;line-height:1.5}
+    .map-tools{display:flex;justify-content:space-between;gap:8px;align-items:center;margin-bottom:12px}
+    .count{font-size:13px;color:var(--muted);white-space:nowrap}
+    .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .field{display:flex;flex-direction:column;gap:6px}
+    label{font-size:13px;font-weight:700}
+    .field.full{grid-column:1/-1}
+    .hint{font-size:12px;color:var(--muted);line-height:1.5}
+    .submit-row{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+    #status{font-size:13px;color:var(--muted);line-height:1.5}
+    .entries{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+    .entry{border:1px solid var(--line);border-radius:13px;padding:12px;min-width:0}
+    .entry h3{margin:0 0 6px;font-size:16px;overflow-wrap:anywhere}
+    .entry p{margin:4px 0;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+    .tag{display:inline-block;border-radius:99px;background:var(--green2);color:var(--green);font-size:11px;font-weight:700;padding:4px 8px;margin-bottom:7px}
+    .empty{padding:20px;text-align:center;color:var(--muted);font-size:14px;border:1px dashed var(--line);border-radius:12px;grid-column:1/-1}
+    .modal{position:fixed;inset:0;background:#10281fd9;z-index:9999;display:flex;align-items:center;justify-content:center;padding:18px}
+    .modal-card{background:white;border-radius:20px;padding:24px;width:min(100%,390px);box-shadow:0 20px 70px #0003}
+    .modal-card h2{margin:0 0 8px;font-size:23px}
+    .modal-card p{font-size:14px;color:var(--muted);line-height:1.6}
+    .modal-card button{width:100%;margin-top:10px}
+    .error{color:#b42318!important}
+    footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 26px;line-height:1.6}
+    .leaflet-popup-content{line-height:1.55}
+    @media(min-width:800px){main{grid-template-columns:minmax(0,1.2fr) minmax(330px,.8fr);align-items:start}.map-panel{grid-column:1/-1}.list-panel{grid-column:1/-1}.form-panel{grid-column:2;grid-row:2}.search-panel{grid-column:1;grid-row:2}#map{height:520px}}
+    @media(max-width:480px){main{padding:10px;gap:10px}.panel{padding:13px;border-radius:15px}#map{height:390px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.entries{grid-template-columns:1fr}.search-row button{padding:12px}.filters{grid-template-columns:1fr 1fr}header{padding:20px 14px}}
+  </style>
+</head>
+<body>
+  <header><div class="head-inner">
+    <div class="eyebrow">EXPO FOOD COMMUNITY MAP</div>
+    <h1>🍽️ 万博グルメMAP</h1>
+    <p>万博会場で出会った、おいしい思い出をみんなで地図に残そう！</p>
+  </div></header>
+  <main>
+    <section class="panel map-panel">
+      <div class="map-tools">
+        <h2 class="section-title" style="margin:0">📍 全国グルメマップ</h2>
+        <span class="count" id="mapCount">0件の投稿</span>
+      </div>
+      <div id="map" aria-label="グルメ投稿の地図"></div>
+      <p class="map-caption">ピンを押すと投稿内容を確認できます。地図は拡大・縮小できます。場所は「大阪府大阪市〜」のように入力してください。</p>
+    </section>
+
+    <section class="panel search-panel">
+      <h2 class="section-title">🔎 グルメを探す</h2>
+      <div class="search-row">
+        <input id="search" type="search" placeholder="国名・店名・料理名・場所で検索" aria-label="グルメ検索">
+        <button id="clearSearch" class="secondary" type="button">クリア</button>
+      </div>
+      <div class="filters">
+        <select id="countryFilter" aria-label="国名で絞り込む"><option value="">すべての国</option></select>
+        <select id="sort" aria-label="並び順"><option value="new">新しい投稿順</option><option value="country">国名順</option><option value="dish">料理名順</option></select>
+      </div>
+      <div id="entries" class="entries"></div>
+    </section>
+
+    <section class="panel form-panel">
+      <h2 class="section-title">✍️ グルメを投稿</h2>
+      <p class="hint" style="margin-top:-4px;margin-bottom:14px">万博会場内で見つけたグルメを教えてください。入力した場所をもとに地図へピンを置きます。</p>
+      <form id="postForm">
+        <div class="form-grid">
+          <div class="field"><label for="nickname">ニックネーム *</label><input id="nickname" required maxlength="40" placeholder="例：グルメ好き"></div>
+          <div class="field"><label for="country">国名 *</label><input id="country" required maxlength="80" placeholder="例：イタリア"></div>
+          <div class="field"><label for="shop">店名 *</label><input id="shop" required maxlength="120" placeholder="例：〇〇レストラン"></div>
+          <div class="field"><label for="dish">料理名 *</label><input id="dish" required maxlength="120" placeholder="例：マルゲリータ"></div>
+          <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所や施設名をできるだけ具体的に入力してください。</span></div>
+        </div>
+        <div class="submit-row"><button id="submitBtn" type="submit">地図に投稿する</button><span id="status" role="status">投稿には共通パスワードが必要です。</span></div>
+      </form>
+    </section>
+
+    <section class="panel list-panel">
+      <h2 class="section-title">🍴 投稿されたグルメ</h2>
+      <div id="allEntries" class="entries"></div>
+    </section>
+  </main>
+  <footer>地図データ © OpenStreetMap contributors<br>このHTMLは試作版です。全員で投稿を共有するにはFirebaseの設定が必要です。</footer>
+
+  <div class="modal" id="passwordModal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
+    <div class="modal-card">
+      <h2 id="passwordTitle">🔐 参加者用パスワード</h2>
+      <p>オープンチャット参加者向けの共通パスワードを入力してください。</p>
+      <form id="passwordForm">
+        <input id="passwordInput" type="password" autocomplete="current-password" placeholder="共通パスワード" required>
+        <button type="submit">入る</button>
+        <p id="passwordError" class="hint error" hidden>パスワードが違います。</p>
+      </form>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <!-- Firebaseを使う場合は、以下のSDKとCONFIGを設定してください。 -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+  <script>
+    // ===== 公開前に設定してください =====
+    // 1) Firebase ConsoleでWebアプリを作成し、firebaseConfigを貼り付け
+    // 2) RTDBを作成し、Database URLを確認
+    // 3) 下の SHARED_PASSWORD を参加者用パスワードに変更
+    // 注意：この簡易パスワードはHTML内に含まれるため、厳密なアクセス制御ではありません。
+    // グループ限定の本格運用には、サーバー側でパスワードを検証する仕組みが必要です。
+    const SHARED_PASSWORD = "クイズ民万博フードMAP";
+    const firebaseConfig = {
+      apiKey: "AIzaSyCFoYku8uDMmCadaLBW4-mUK70b9kFKPbU",
+      authDomain: "expofoodmap.firebaseapp.com",
+      databaseURL: "https://expofoodmap-default-rtdb.firebaseio.com",
+      projectId: "expofoodmap",
+      storageBucket: "expofoodmap.firebasestorage.app",
+      messagingSenderId: "252077515185",
+      appId: "1:252077515185:web:bdad8f4e270806bef9dd90",
+      measurementId: "G-TH56LPKHPR"
+    };
+    const firebaseConfigured = firebaseConfig.apiKey !== "YOUR_API_KEY" &&
+      firebaseConfig.projectId !== "YOUR_PROJECT_ID" &&
+      firebaseConfig.databaseURL.includes("firebaseio.com");
+
+    const map = L.map('map', { zoomControl: true }).setView([36.2048, 138.2529], 5);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+    const markerLayer = L.layerGroup().addTo(map);
+    let db = null;
+    let records = [];
+    let sessionUnlocked = false;
+    const localKey = 'expo-gourmet-map-demo-v1';
+
+    const $ = id => document.getElementById(id);
+    const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const hasConfig = () => firebaseConfigured && window.firebase;
+    if (hasConfig()) {
+      try {
+        firebase.initializeApp(firebaseConfig);
+        db = firebase.database();
+        db.ref('gourmetPosts').on('value', snap => {
+          const value = snap.val() || {};
+          records = Object.entries(value).map(([id, v]) => ({...v, id})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+          render();
+        }, err => setStatus('Firebaseから読み込めません。設定とDatabaseルールを確認してください。', true));
+      } catch (e) { console.error(e); setStatus('Firebase初期化に失敗しました。設定を確認してください。', true); }
+    } else {
+      try { records = JSON.parse(localStorage.getItem(localKey) || '[]'); } catch { records = []; }
+      // 未設定時はこの端末だけで動くデモモードです。ほかの参加者とは共有されません。
+      render();
+    }
+
+    $('passwordForm').addEventListener('submit', e => {
+      e.preventDefault();
+      const entered = $('passwordInput').value;
+      if (entered === SHARED_PASSWORD && SHARED_PASSWORD !== "ここを共通パスワードに変更") {
+        sessionUnlocked = true;
+        $('passwordModal').style.display = 'none';
+        $('passwordError').hidden = true;
+      } else {
+        $('passwordError').hidden = false;
+      }
+    });
+    function setStatus(message, isError=false) {
+      $('status').textContent = message;
+      $('status').classList.toggle('error', isError);
+    }
+
+    async function geocode(place) {
+      // Nominatimの利用制限に配慮し、投稿時にのみ1回検索します。
+      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=' + encodeURIComponent(place);
+      const response = await fetch(url, {headers:{'Accept-Language':'ja'}});
+      if (!response.ok) throw new Error('場所を検索できませんでした');
+      const data = await response.json();
+      if (!data.length) throw new Error('場所が見つかりません。住所や施設名を詳しく入力してください。');
+      return {lat:Number(data[0].lat), lng:Number(data[0].lon), displayName:data[0].display_name || place};
+    }
+
+    $('postForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      if (!sessionUnlocked) {
+        $('passwordModal').style.display = 'flex';
+        setStatus('先に共通パスワードを入力してください。', true);
+        return;
+      }
+      const post = {
+        nickname:$('nickname').value.trim(), country:$('country').value.trim(),
+        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim()
+      };
+      if (Object.values(post).some(v=>!v)) { setStatus('すべての項目を入力してください。', true); return; }
+      const btn = $('submitBtn'); btn.disabled = true; setStatus('場所を確認しています…');
+      try {
+        const geo = await geocode(post.place);
+        const record = {...post, lat:geo.lat, lng:geo.lng, geocodedPlace:geo.displayName, createdAt:Date.now()};
+        if (db) {
+          await db.ref('gourmetPosts').push(record);
+          setStatus('投稿しました！地図にピンを追加しました。');
+        } else {
+          record.id = 'local-' + record.createdAt;
+          records.unshift(record);
+          localStorage.setItem(localKey, JSON.stringify(records));
+          render();
+          setStatus('デモ投稿を追加しました。この端末だけに保存されています。Firebase設定後は全員で共有できます。');
+        }
+        $('postForm').reset();
+        map.setView([geo.lat, geo.lng], Math.max(map.getZoom(), 11));
+      } catch (err) {
+        setStatus(err.message || '投稿できませんでした。通信状況を確認してください。', true);
+      } finally { btn.disabled = false; }
+    });
+
+    function popupHTML(r) {
+      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿：${esc(r.nickname)}`;
+    }
+    function cardHTML(r) {
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿：</strong>${esc(r.nickname)}</p></article>`;
+    }
+    function render() {
+      const q = $('search').value.trim().toLocaleLowerCase();
+      const cf = $('countryFilter').value;
+      const sort = $('sort').value;
+      const filtered = records.filter(r => (!cf || r.country===cf) &&
+        [r.nickname,r.country,r.shop,r.dish,r.place].some(v=>String(v||'').toLocaleLowerCase().includes(q)));
+      if (sort==='country') filtered.sort((a,b)=>a.country.localeCompare(b.country,'ja'));
+      if (sort==='dish') filtered.sort((a,b)=>a.dish.localeCompare(b.dish,'ja'));
+      $('mapCount').textContent = `${records.length}件の投稿`;
+      const selected = $('countryFilter').value;
+      const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
+      $('countryFilter').innerHTML = '<option value="">すべての国</option>' + countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
+      $('countryFilter').value = selected;
+      $('entries').innerHTML = filtered.length ? filtered.map(cardHTML).join('') : '<div class="empty">該当するグルメはまだありません。</div>';
+      $('allEntries').innerHTML = records.length ? records.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
+      markerLayer.clearLayers();
+      records.forEach(r=>{
+        if (Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng))) {
+          L.marker([Number(r.lat),Number(r.lng)]).bindPopup(popupHTML(r)).addTo(markerLayer);
+        }
+      });
+    }
+    ['search','countryFilter','sort'].forEach(id => $(id).addEventListener(id==='search'?'input':'change', render));
+    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';render();});
+  </script>
+</body>
+</html>
