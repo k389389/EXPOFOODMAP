@@ -110,6 +110,7 @@
           <div class="field"><label for="shop">店名 *</label><input id="shop" required maxlength="120" placeholder="例：〇〇レストラン"></div>
           <div class="field"><label for="dish">料理名 *</label><input id="dish" required maxlength="120" placeholder="例：マルゲリータ"></div>
           <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所は入力した文字のまま保存します。検索で近くにピンを置き、地図上で正しい位置に調整できます。</span></div>
+          <div class="field full"><label for="siteUrl">お店のサイト・URL（任意）</label><input id="siteUrl" type="url" maxlength="500" placeholder="例：https://example.com" pattern="https://.+" title="https:// から始まるURLを入力してください"><span class="hint">https:// から始まるWebサイトのみ登録できます。URLがなくても投稿できます。リンク先の安全性を完全に保証するものではないため、信頼できるサイトのURLを入力してください。</span></div>
         </div>
         <div class="submit-row"><button id="pickLocationBtn" class="secondary" type="button">📍 住所から候補を検索・位置を調整</button><span id="pinStatus" class="hint">ピンの位置：未指定（投稿前に地図で指定してください）</span></div>
         <div class="submit-row"><button id="submitBtn" type="submit">地図に投稿する</button><button id="cancelEditBtn" class="secondary" type="button" hidden>編集をキャンセル</button><span id="status" role="status">投稿には共通パスワードが必要です。</span></div>
@@ -375,9 +376,11 @@
       }
       const post = {
         nickname:$('nickname').value.trim(), country:$('country').value.trim(),
-        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim()
+        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim(),
+        siteUrl:$('siteUrl').value.trim()
       };
-      if (Object.values(post).some(v=>!v)) { setStatus('すべての項目を入力してください。', true); return; }
+      if ([post.nickname,post.country,post.shop,post.dish,post.place].some(v=>!v)) { setStatus('URL以外の必須項目を入力してください。', true); return; }
+      if (post.siteUrl && !isAllowedSiteUrl(post.siteUrl)) { setStatus('お店のURLは、正しい https:// から始まるWebサイトのURLを入力してください。http:// や不正な形式のURLは使用できません。', true); return; }
       const btn = $('submitBtn'); btn.disabled = true; setStatus('投稿を保存しています…');
       try {
         if (!selectedPin) {
@@ -393,7 +396,7 @@
           if (db && !String(editingId).startsWith('local-')) {
             await db.ref('gourmetPosts/' + editingId).update({
               nickname:updated.nickname, country:updated.country, shop:updated.shop,
-              dish:updated.dish, place:updated.place, lat:updated.lat, lng:updated.lng,
+              dish:updated.dish, place:updated.place, siteUrl:updated.siteUrl || '', lat:updated.lat, lng:updated.lng,
               geocodedPlace:updated.geocodedPlace, updatedAt:updated.updatedAt
             });
             setStatus('投稿内容を更新しました。');
@@ -432,11 +435,26 @@
       if (Number.isNaN(date.getTime())) return '日時不明';
       return date.toLocaleDateString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit'});
     }
+    // URLはHTTPSの通常のWebサイトのみ許可。資格情報入りURLや不正なホストも拒否する。
+    function isAllowedSiteUrl(value) {
+      try {
+        const url = new URL(String(value || '').trim());
+        return url.protocol === 'https:' && Boolean(url.hostname) && !url.username && !url.password;
+      } catch { return false; }
+    }
+    function safeSiteUrl(value) {
+      const url = String(value || '').trim();
+      return isAllowedSiteUrl(url) ? url : '';
+    }
     function popupHTML(r) {
-      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿：${esc(r.nickname)}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
+      const url = safeSiteUrl(r.siteUrl);
+      const site = url ? `<br>🌐 <a href="${esc(url)}" target="_blank" rel="noopener noreferrer">お店のサイト</a>` : '';
+      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}${site}<br>投稿：${esc(r.nickname)}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
     }
     function cardHTML(r) {
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      const url = safeSiteUrl(r.siteUrl);
+      const site = url ? `<p><strong>サイト：</strong><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">お店のサイトを開く ↗</a></p>` : '';
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${site}<p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
 
     async function handleEntryAction(event) {
@@ -458,6 +476,7 @@
         $('shop').value = record.shop || '';
         $('dish').value = record.dish || '';
         $('place').value = record.place || '';
+        $('siteUrl').value = record.siteUrl || '';
         selectedPin = (Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lng))) ? {lat:Number(record.lat), lng:Number(record.lng)} : null;
         $('pinStatus').textContent = selectedPin ? `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）` : 'ピンの位置：未指定（地図で指定してください）';
         $('submitBtn').textContent = '変更を保存する';
@@ -497,7 +516,7 @@
       const cf = $('countryFilter').value;
       const sort = $('sort').value;
       const filtered = records.filter(r => (!cf || r.country===cf) &&
-        [r.nickname,r.country,r.shop,r.dish,r.place].some(v=>String(v||'').toLocaleLowerCase().includes(q)));
+        [r.nickname,r.country,r.shop,r.dish,r.place,r.siteUrl].some(v=>String(v||'').toLocaleLowerCase().includes(q)));
       if (sort==='country') filtered.sort((a,b)=>a.country.localeCompare(b.country,'ja'));
       if (sort==='dish') filtered.sort((a,b)=>a.dish.localeCompare(b.dish,'ja'));
       $('mapCount').textContent = `${records.length}件の投稿`;
