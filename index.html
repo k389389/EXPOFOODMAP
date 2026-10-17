@@ -87,6 +87,7 @@
       <h2 class="section-title">🔎 グルメを探す</h2>
       <div class="search-row">
         <input id="search" type="search" placeholder="国名・店名・料理名・場所で検索" aria-label="グルメ検索">
+        <button id="searchBtn" type="button">検索</button>
         <button id="clearSearch" class="secondary" type="button">クリア</button>
       </div>
       <div class="filters">
@@ -94,7 +95,9 @@
         <select id="sort" aria-label="並び順"><option value="new">新しい投稿順</option><option value="country">国名順</option><option value="dish">料理名順</option></select>
       </div>
       <h3 style="font-size:14px;margin:14px 0 0">検索結果（過去の投稿も対象）</h3>
-      <div id="entries" class="entries"></div>
+      <div id="entries" class="entries" hidden></div>
+      <div class="list-controls"><button id="searchMoreBtn" class="secondary" type="button" hidden>もっと見る（10件）</button></div>
+      <p id="searchCount" class="hint" style="text-align:center;margin-bottom:0"></p>
     </section>
 
     <section class="panel form-panel">
@@ -114,13 +117,18 @@
     </section>
 
     <section class="panel list-panel">
-      <h2 class="section-title">🍴 投稿されたグルメ</h2>
+      <h2 class="section-title">🍴 最新の投稿</h2>
       <div id="allEntries" class="entries"></div>
-      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（10件）</button></div>
+      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（5件）</button></div>
       <p id="listCount" class="hint" style="text-align:center;margin-bottom:0"></p>
     </section>
   </main>
-  <footer>地図データ © OpenStreetMap contributors</footer>
+  <footer>
+    <p>地図データ © OpenStreetMap contributors</p>
+    <p><strong>【ご利用にあたっての注意】</strong><br>
+    掲載されている情報は、最新のものとは限りません。店舗の閉店や移転、メニューの変更・販売終了などにより、実際の状況と異なる場合があります。<br>
+    ご利用の際は、最新の情報を各自でご確認ください。本サイトの情報は、あくまで参考としてご活用ください。</p>
+  </footer>
 
   <div class="modal" id="passwordModal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
     <div class="modal-card">
@@ -186,7 +194,10 @@
     let pickerMarker = null;
     const localKey = 'expo-gourmet-map-demo-v1';
     const PAGE_SIZE = 10;
-    let visiblePostCount = PAGE_SIZE;
+    const LATEST_PAGE_SIZE = 5;
+    let visiblePostCount = LATEST_PAGE_SIZE;
+    let searchHasRun = false;
+    let visibleSearchCount = PAGE_SIZE;
 
     const $ = id => document.getElementById(id);
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -477,7 +488,10 @@
     }
     $('entries').addEventListener('click', handleEntryAction);
     $('allEntries').addEventListener('click', handleEntryAction);
-    $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += PAGE_SIZE; render(); });
+    $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += LATEST_PAGE_SIZE; render(); });
+    $('searchBtn').addEventListener('click', () => { searchHasRun = true; visibleSearchCount = PAGE_SIZE; render(); });
+    $('search').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('searchBtn').click(); } });
+    $('searchMoreBtn').addEventListener('click', () => { visibleSearchCount += PAGE_SIZE; render(); });
     function render() {
       const q = $('search').value.trim().toLocaleLowerCase();
       const cf = $('countryFilter').value;
@@ -491,13 +505,23 @@
       const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
       $('countryFilter').innerHTML = '<option value="">すべての国</option>' + countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
       $('countryFilter').value = selected;
-      // 検索結果は全投稿を対象に表示し、過去の投稿も検索できます。
-      $('entries').innerHTML = filtered.length ? filtered.map(cardHTML).join('') : '<div class="empty">該当するグルメはまだありません。</div>';
+      // 検索ボタンを押すまでは検索結果を表示しない。空欄検索なら条件に合う全投稿を表示。
+      $('entries').hidden = !searchHasRun;
+      $('searchMoreBtn').hidden = !searchHasRun || visibleSearchCount >= filtered.length;
+      if (searchHasRun) {
+        const visibleSearchRecords = filtered.slice(0, visibleSearchCount);
+        $('entries').innerHTML = visibleSearchRecords.length ? visibleSearchRecords.map(cardHTML).join('') : '<div class="empty">該当するグルメはまだありません。</div>';
+        $('searchCount').textContent = filtered.length ? `${visibleSearchRecords.length}件 / 検索対象 ${filtered.length}件を表示中` : '該当するグルメはありません。';
+      } else {
+        $('entries').innerHTML = '';
+        $('searchCount').textContent = '';
+      }
 
-      // 通常の投稿一覧は新しい投稿から10件ずつ表示します。
+      // 最新の投稿は新しい順に5件ずつ表示。
       const visibleRecords = records.slice(0, visiblePostCount);
       $('allEntries').innerHTML = visibleRecords.length ? visibleRecords.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
       $('loadMoreBtn').hidden = visiblePostCount >= records.length;
+      $('loadMoreBtn').textContent = 'もっと見る（5件）';
       $('listCount').textContent = records.length ? `${visibleRecords.length}件 / 全${records.length}件を表示中` : '';
       renderMapPins();
     }
@@ -513,8 +537,8 @@
         }
       });
     }
-    ['search','countryFilter','sort'].forEach(id => $(id).addEventListener(id==='search'?'input':'change', () => { visiblePostCount = PAGE_SIZE; render(); }));
-    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';visiblePostCount=PAGE_SIZE;render();});
+    ['countryFilter','sort'].forEach(id => $(id).addEventListener('change', () => { visiblePostCount = LATEST_PAGE_SIZE; if (searchHasRun) visibleSearchCount = PAGE_SIZE; render(); }));
+    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';searchHasRun=false;visibleSearchCount=PAGE_SIZE;visiblePostCount=LATEST_PAGE_SIZE;render();});
   </script>
 </body>
 </html>
