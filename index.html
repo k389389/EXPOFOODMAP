@@ -39,6 +39,8 @@
     .submit-row{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
     #status{font-size:13px;color:var(--muted);line-height:1.5}
     .entries{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+    .list-controls{display:flex;justify-content:center;margin-top:14px}
+    .list-controls button{min-width:180px}
     .entry{border:1px solid var(--line);border-radius:13px;padding:12px;min-width:0}
     .entry h3{margin:0 0 6px;font-size:16px;overflow-wrap:anywhere}
     .entry p{margin:4px 0;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
@@ -91,6 +93,7 @@
         <select id="countryFilter" aria-label="国名で絞り込む"><option value="">すべての国</option></select>
         <select id="sort" aria-label="並び順"><option value="new">新しい投稿順</option><option value="country">国名順</option><option value="dish">料理名順</option></select>
       </div>
+      <h3 style="font-size:14px;margin:14px 0 0">検索結果（過去の投稿も対象）</h3>
       <div id="entries" class="entries"></div>
     </section>
 
@@ -113,9 +116,11 @@
     <section class="panel list-panel">
       <h2 class="section-title">🍴 投稿されたグルメ</h2>
       <div id="allEntries" class="entries"></div>
+      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（10件）</button></div>
+      <p id="listCount" class="hint" style="text-align:center;margin-bottom:0"></p>
     </section>
   </main>
-  <footer>地図データ © OpenStreetMap contributors<br>このHTMLは試作版です。全員で投稿を共有するにはFirebaseの設定が必要です。</footer>
+  <footer>地図データ © OpenStreetMap contributors</footer>
 
   <div class="modal" id="passwordModal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
     <div class="modal-card">
@@ -178,6 +183,8 @@
     let pickerMap = null;
     let pickerMarker = null;
     const localKey = 'expo-gourmet-map-demo-v1';
+    const PAGE_SIZE = 10;
+    let visiblePostCount = PAGE_SIZE;
 
     const $ = id => document.getElementById(id);
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -473,6 +480,7 @@
     }
     $('entries').addEventListener('click', handleEntryAction);
     $('allEntries').addEventListener('click', handleEntryAction);
+    $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += PAGE_SIZE; render(); });
     function render() {
       const q = $('search').value.trim().toLocaleLowerCase();
       const cf = $('countryFilter').value;
@@ -486,8 +494,14 @@
       const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
       $('countryFilter').innerHTML = '<option value="">すべての国</option>' + countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
       $('countryFilter').value = selected;
+      // 検索結果は全投稿を対象に表示し、過去の投稿も検索できます。
       $('entries').innerHTML = filtered.length ? filtered.map(cardHTML).join('') : '<div class="empty">該当するグルメはまだありません。</div>';
-      $('allEntries').innerHTML = records.length ? records.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
+
+      // 通常の投稿一覧は新しい投稿から10件ずつ表示します。
+      const visibleRecords = records.slice(0, visiblePostCount);
+      $('allEntries').innerHTML = visibleRecords.length ? visibleRecords.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
+      $('loadMoreBtn').hidden = visiblePostCount >= records.length;
+      $('listCount').textContent = records.length ? `${visibleRecords.length}件 / 全${records.length}件を表示中` : '';
       markerLayer.clearLayers();
       records.forEach(r=>{
         if (Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng))) {
@@ -495,8 +509,8 @@
         }
       });
     }
-    ['search','countryFilter','sort'].forEach(id => $(id).addEventListener(id==='search'?'input':'change', render));
-    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';render();});
+    ['search','countryFilter','sort'].forEach(id => $(id).addEventListener(id==='search'?'input':'change', () => { visiblePostCount = PAGE_SIZE; render(); }));
+    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';visiblePostCount=PAGE_SIZE;render();});
   </script>
 </body>
 </html>
