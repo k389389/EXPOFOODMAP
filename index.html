@@ -42,6 +42,9 @@
     .entry{border:1px solid var(--line);border-radius:13px;padding:12px;min-width:0}
     .entry h3{margin:0 0 6px;font-size:16px;overflow-wrap:anywhere}
     .entry p{margin:4px 0;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
+    .entry-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+    .entry-actions button{padding:8px 11px;font-size:12px}
+    .entry-actions .delete-entry{background:#a83232;color:#fff}
     .tag{display:inline-block;border-radius:99px;background:var(--green2);color:var(--green);font-size:11px;font-weight:700;padding:4px 8px;margin-bottom:7px}
     .empty{padding:20px;text-align:center;color:var(--muted);font-size:14px;border:1px dashed var(--line);border-radius:12px;grid-column:1/-1}
     .modal{position:fixed;inset:0;background:#10281fd9;z-index:9999;display:flex;align-items:center;justify-content:center;padding:18px}
@@ -96,7 +99,7 @@
           <div class="field"><label for="dish">料理名 *</label><input id="dish" required maxlength="120" placeholder="例：マルゲリータ"></div>
           <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所や施設名をできるだけ具体的に入力してください。</span></div>
         </div>
-        <div class="submit-row"><button id="submitBtn" type="submit">地図に投稿する</button><span id="status" role="status">投稿には共通パスワードが必要です。</span></div>
+        <div class="submit-row"><button id="submitBtn" type="submit">地図に投稿する</button><button id="cancelEditBtn" class="secondary" type="button" hidden>編集をキャンセル</button><span id="status" role="status">投稿には共通パスワードが必要です。</span></div>
       </form>
     </section>
 
@@ -153,6 +156,7 @@
     let db = null;
     let records = [];
     let sessionUnlocked = false;
+    let editingId = null;
     const localKey = 'expo-gourmet-map-demo-v1';
 
     const $ = id => document.getElementById(id);
@@ -191,14 +195,43 @@
     }
 
     async function geocode(place) {
-      // Nominatimの利用制限に配慮し、投稿時にのみ1回検索します。
-      const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=' + encodeURIComponent(place);
-      const response = await fetch(url, {headers:{'Accept-Language':'ja'}});
-      if (!response.ok) throw new Error('場所を検索できませんでした');
-      const data = await response.json();
-      if (!data.length) throw new Error('場所が見つかりません。住所や施設名を詳しく入力してください。');
-      return {lat:Number(data[0].lat), lng:Number(data[0].lon), displayName:data[0].display_name || place};
+      // まず入力どおりの住所を検索し、見つからない場合だけ階数などを除いた住所でも試します。
+      // 例：「大阪府大阪市北区大深町6-38 グラングリーン大阪 北館 2F」
+      const cleaned = place
+        .replace(/[　\\s]+/g, ' ')
+        .replace(/(?:北館|南館|本館|別館)?\\s*\\d+\\s*(?:F|階)/gi, '')
+        .replace(/[　\\s]+/g, ' ')
+        .trim();
+      const queries = [...new Set([place.trim(), cleaned, cleaned.replace(/グラングリーン大阪\\s*/g, ''), cleaned.replace(/\\s+/g, '')].filter(Boolean))];
+      let lastError = null;
+      for (const query of queries) {
+        try {
+          const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=jp&q=' + encodeURIComponent(query);
+          const response = await fetch(url, {headers:{'Accept-Language':'ja'}});
+          if (!response.ok) throw new Error('場所を検索できませんでした');
+          const data = await response.json();
+          if (data.length) {
+            return {lat:Number(data[0].lat), lng:Number(data[0].lon), displayName:data[0].display_name || query};
+          }
+        } catch (err) {
+          lastError = err;
+        }
+      }
+      if (lastError) throw lastError;
+      throw new Error('場所が見つかりません。住所に加えて、施設名や近くの建物名も入力してください。');
     }
+
+    function resetEditMode() {
+      editingId = null;
+      $('postForm').reset();
+      $('submitBtn').textContent = '地図に投稿する';
+      $('cancelEditBtn').hidden = true;
+    }
+
+    $('cancelEditBtn').addEventListener('click', () => {
+      resetEditMode();
+      setStatus('編集をキャンセルしました。');
+    });
 
     $('postForm').addEventListener('submit', async e => {
       e.preventDefault();
@@ -215,30 +248,107 @@
       const btn = $('submitBtn'); btn.disabled = true; setStatus('場所を確認しています…');
       try {
         const geo = await geocode(post.place);
-        const record = {...post, lat:geo.lat, lng:geo.lng, geocodedPlace:geo.displayName, createdAt:Date.now()};
-        if (db) {
-          await db.ref('gourmetPosts').push(record);
-          setStatus('投稿しました！地図にピンを追加しました。');
+        if (editingId) {
+          const existing = records.find(r => String(r.id) === String(editingId));
+          if (!existing) throw new Error('編集対象の投稿が見つかりません。画面を更新して再度お試しください。');
+          const updated = {...existing, ...post, lat:geo.lat, lng:geo.lng, geocodedPlace:geo.displayName, updatedAt:Date.now()};
+          if (db && !String(editingId).startsWith('local-')) {
+            await db.ref('gourmetPosts/' + editingId).update({
+              nickname:updated.nickname, country:updated.country, shop:updated.shop,
+              dish:updated.dish, place:updated.place, lat:updated.lat, lng:updated.lng,
+              geocodedPlace:updated.geocodedPlace, updatedAt:updated.updatedAt
+            });
+            setStatus('投稿内容を更新しました。');
+          } else {
+            records = records.map(r => String(r.id) === String(editingId) ? updated : r);
+            localStorage.setItem(localKey, JSON.stringify(records));
+            render();
+            setStatus('投稿内容を更新しました（この端末内のデータです）。');
+          }
+          resetEditMode();
         } else {
-          record.id = 'local-' + record.createdAt;
-          records.unshift(record);
-          localStorage.setItem(localKey, JSON.stringify(records));
-          render();
-          setStatus('デモ投稿を追加しました。この端末だけに保存されています。Firebase設定後は全員で共有できます。');
+          const record = {...post, lat:geo.lat, lng:geo.lng, geocodedPlace:geo.displayName, createdAt:Date.now()};
+          if (db) {
+            await db.ref('gourmetPosts').push(record);
+            setStatus('投稿しました！地図にピンを追加しました。');
+          } else {
+            record.id = 'local-' + record.createdAt;
+            records.unshift(record);
+            localStorage.setItem(localKey, JSON.stringify(records));
+            render();
+            setStatus('デモ投稿を追加しました。この端末だけに保存されています。Firebase設定後は全員で共有できます。');
+          }
+          $('postForm').reset();
         }
-        $('postForm').reset();
         map.setView([geo.lat, geo.lng], Math.max(map.getZoom(), 11));
       } catch (err) {
         setStatus(err.message || '投稿できませんでした。通信状況を確認してください。', true);
       } finally { btn.disabled = false; }
     });
 
+    function formatPostDate(value) {
+      if (!value) return '日時不明';
+      const date = new Date(Number(value));
+      if (Number.isNaN(date.getTime())) return '日時不明';
+      return date.toLocaleString('ja-JP', {
+        year:'numeric', month:'2-digit', day:'2-digit',
+        hour:'2-digit', minute:'2-digit', hour12:false
+      });
+    }
     function popupHTML(r) {
-      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿：${esc(r.nickname)}`;
+      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿：${esc(r.nickname)}<br>投稿日時：${esc(formatPostDate(r.createdAt))}`;
     }
     function cardHTML(r) {
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿：</strong>${esc(r.nickname)}</p></article>`;
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日時：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
+
+    async function handleEntryAction(event) {
+      const button = event.target.closest('button[data-action]');
+      if (!button) return;
+      if (!sessionUnlocked) {
+        $('passwordModal').style.display = 'flex';
+        setStatus('編集・削除には共通パスワードが必要です。', true);
+        return;
+      }
+      const id = button.dataset.id;
+      const record = records.find(r => String(r.id) === String(id));
+      if (!record) { setStatus('投稿が見つかりません。画面を更新してください。', true); return; }
+
+      if (button.dataset.action === 'edit') {
+        editingId = id;
+        $('nickname').value = record.nickname || '';
+        $('country').value = record.country || '';
+        $('shop').value = record.shop || '';
+        $('dish').value = record.dish || '';
+        $('place').value = record.place || '';
+        $('submitBtn').textContent = '変更を保存する';
+        $('cancelEditBtn').hidden = false;
+        $('postForm').scrollIntoView({behavior:'smooth', block:'start'});
+        setStatus('内容を編集し、「変更を保存する」を押してください。');
+        return;
+      }
+
+      if (button.dataset.action === 'delete') {
+        if (!confirm(`「${record.dish}」（${record.shop}）を削除しますか？この操作は取り消せません。`)) return;
+        button.disabled = true;
+        try {
+          if (db && !String(id).startsWith('local-')) {
+            await db.ref('gourmetPosts/' + id).remove();
+          } else {
+            records = records.filter(r => String(r.id) !== String(id));
+            localStorage.setItem(localKey, JSON.stringify(records));
+            render();
+          }
+          if (String(editingId) === String(id)) resetEditMode();
+          setStatus('投稿を削除しました。');
+        } catch (err) {
+          setStatus('削除できませんでした。FirebaseのDatabaseルールを確認してください。', true);
+          button.disabled = false;
+        }
+      }
+    }
+    $('entries').addEventListener('click', handleEntryAction);
+    $('allEntries').addEventListener('click', handleEntryAction);
     function render() {
       const q = $('search').value.trim().toLocaleLowerCase();
       const cf = $('countryFilter').value;
