@@ -47,6 +47,9 @@
     .site-url{overflow-wrap:anywhere;word-break:break-word}
     .site-url a{overflow-wrap:anywhere;word-break:break-word}
     .entry-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
+    .personal-checks{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;padding:9px 10px;background:#f5faf7;border-radius:10px;font-size:13px}
+    .personal-checks label{display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer}
+    .personal-checks input{width:18px;height:18px;margin:0;accent-color:var(--green)}
     .entry-actions button{padding:8px 11px;font-size:12px}
     .entry-actions .delete-entry{background:#a83232;color:#fff}
     .tag{display:inline-block;border-radius:99px;background:var(--green2);color:var(--green);font-size:11px;font-weight:700;padding:4px 8px;margin-bottom:7px}
@@ -95,7 +98,10 @@
       <div class="filters">
         <select id="countryFilter" aria-label="国名で絞り込む"><option value="">すべての国</option></select>
         <select id="sort" aria-label="並び順"><option value="new">新しい投稿順</option><option value="country">国名順</option><option value="dish">料理名順</option></select>
+        <select id="visitedFilter" aria-label="行ったチェックで絞り込む"><option value="all">行った：すべて</option><option value="yes">行った：チェックあり</option><option value="no">行った：チェックなし</option></select>
+        <select id="eatenFilter" aria-label="食べたチェックで絞り込む"><option value="all">食べた：すべて</option><option value="yes">食べた：チェックあり</option><option value="no">食べた：チェックなし</option></select>
       </div>
+      <p class="hint" style="margin:8px 0 0">「行った」「食べた」のチェックは、このブラウザだけに保存され、ほかの人には共有されません。</p>
       <h3 style="font-size:14px;margin:14px 0 0">検索結果（過去の投稿も対象）</h3>
       <div id="entries" class="entries" hidden></div>
       <div class="list-controls"><button id="searchMoreBtn" class="secondary" type="button" hidden>もっと見る（10件）</button></div>
@@ -203,6 +209,11 @@
     let visiblePostCount = LATEST_PAGE_SIZE;
     let searchHasRun = false;
     let visibleSearchCount = PAGE_SIZE;
+    const personalChecksKey = 'expo-food-map-personal-checks-v1';
+    let personalChecks = {};
+    try { personalChecks = JSON.parse(localStorage.getItem(personalChecksKey) || '{}') || {}; } catch { personalChecks = {}; }
+    function savePersonalChecks() { try { localStorage.setItem(personalChecksKey, JSON.stringify(personalChecks)); } catch (e) { console.warn('個人チェックを保存できませんでした', e); } }
+    function getPersonalCheck(id) { return personalChecks[String(id)] || {visited:false, eaten:false}; }
 
     const $ = id => document.getElementById(id);
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -458,7 +469,8 @@
     function cardHTML(r) {
       const url = safeSiteUrl(r.siteUrl);
       const site = url ? `<p><strong>お店のサイトURL：</strong><br><a class="site-url" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></p>` : '';
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${site}<p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      const checks = getPersonalCheck(r.id);
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${site}<p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-personal-check="visited" data-id="${esc(r.id)}" ${checks.visited ? 'checked' : ''}> 🏠 行った</label><label><input type="checkbox" data-personal-check="eaten" data-id="${esc(r.id)}" ${checks.eaten ? 'checked' : ''}> 🍴 食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
 
     async function handleEntryAction(event) {
@@ -511,6 +523,21 @@
     }
     $('entries').addEventListener('click', handleEntryAction);
     $('allEntries').addEventListener('click', handleEntryAction);
+    function handlePersonalCheckChange(event) {
+      const input = event.target.closest('input[data-personal-check]');
+      if (!input) return;
+      const id = String(input.dataset.id);
+      const type = input.dataset.personalCheck;
+      const current = getPersonalCheck(id);
+      current[type] = input.checked;
+      personalChecks[id] = current;
+      savePersonalChecks();
+      // 同じ投稿が検索結果と最新投稿の両方に表示されている場合も状態を同期
+      document.querySelectorAll(`input[data-personal-check="${type}"][data-id="${CSS.escape(id)}"]`).forEach(el => { if (el !== input) el.checked = input.checked; });
+      if (searchHasRun && ($('visitedFilter').value !== 'all' || $('eatenFilter').value !== 'all')) render();
+    }
+    $('entries').addEventListener('change', handlePersonalCheckChange);
+    $('allEntries').addEventListener('change', handlePersonalCheckChange);
     $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += LATEST_PAGE_SIZE; render(); });
     $('searchBtn').addEventListener('click', () => { searchHasRun = true; visibleSearchCount = PAGE_SIZE; render(); });
     $('search').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('searchBtn').click(); } });
@@ -519,8 +546,15 @@
       const q = $('search').value.trim().toLocaleLowerCase();
       const cf = $('countryFilter').value;
       const sort = $('sort').value;
-      const filtered = records.filter(r => (!cf || r.country===cf) &&
-        [r.nickname,r.country,r.shop,r.dish,r.place,r.siteUrl].some(v=>String(v||'').toLocaleLowerCase().includes(q)));
+      const vf = $('visitedFilter').value;
+      const ef = $('eatenFilter').value;
+      const filtered = records.filter(r => {
+        const checks = getPersonalCheck(r.id);
+        const matchesVisited = vf === 'all' || (vf === 'yes' ? !!checks.visited : !checks.visited);
+        const matchesEaten = ef === 'all' || (ef === 'yes' ? !!checks.eaten : !checks.eaten);
+        return (!cf || r.country===cf) && matchesVisited && matchesEaten &&
+          [r.nickname,r.country,r.shop,r.dish,r.place,r.siteUrl].some(v=>String(v||'').toLocaleLowerCase().includes(q));
+      });
       if (sort==='country') filtered.sort((a,b)=>a.country.localeCompare(b.country,'ja'));
       if (sort==='dish') filtered.sort((a,b)=>a.dish.localeCompare(b.dish,'ja'));
       $('mapCount').textContent = `${records.length}件の投稿`;
@@ -560,8 +594,8 @@
         }
       });
     }
-    ['countryFilter','sort'].forEach(id => $(id).addEventListener('change', () => { visiblePostCount = LATEST_PAGE_SIZE; if (searchHasRun) visibleSearchCount = PAGE_SIZE; render(); }));
-    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';searchHasRun=false;visibleSearchCount=PAGE_SIZE;visiblePostCount=LATEST_PAGE_SIZE;render();});
+    ['countryFilter','sort','visitedFilter','eatenFilter'].forEach(id => $(id).addEventListener('change', () => { visiblePostCount = LATEST_PAGE_SIZE; if (searchHasRun) { searchHasRun = true; visibleSearchCount = PAGE_SIZE; } render(); }));
+    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';$('visitedFilter').value='all';$('eatenFilter').value='all';searchHasRun=false;visibleSearchCount=PAGE_SIZE;visiblePostCount=LATEST_PAGE_SIZE;render();});
   </script>
 </body>
 </html>
