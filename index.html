@@ -50,6 +50,29 @@
     .personal-checks{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;padding:9px 10px;background:#f5faf7;border-radius:10px;font-size:13px}
     .personal-checks label{display:flex;align-items:center;gap:6px;font-weight:600;cursor:pointer}
     .personal-checks input{width:18px;height:18px;margin:0;accent-color:var(--green)}
+    .title-panel{background:linear-gradient(135deg,#fff9e8,#fff);border:1px solid #f0d99c;position:relative;overflow:hidden}
+    .title-main{display:flex;align-items:center;gap:12px}
+    .title-emblem{width:52px;height:52px;display:grid;place-items:center;border-radius:16px;background:#fff0c2;font-size:28px;flex-shrink:0}
+    .title-name{font-size:clamp(17px,3vw,22px);font-weight:800;color:#79520b;line-height:1.35}
+    .title-meta{display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:#79520b;font-size:13px;margin-top:12px}
+    .title-progress{height:9px;background:#f3e5bd;border-radius:99px;overflow:hidden;margin-top:8px}
+    .title-progress-fill{height:100%;width:0;background:linear-gradient(90deg,#e5a92c,#f6d66b);border-radius:99px;transition:width .35s ease}
+    .effect-toast{position:fixed;left:50%;bottom:22px;transform:translate(-50%,20px) scale(.92);opacity:0;pointer-events:none;z-index:11000;background:#153f30;color:white;border-radius:999px;padding:12px 20px;font-weight:800;box-shadow:0 8px 28px #0003;transition:opacity .2s ease,transform .2s ease;white-space:nowrap;max-width:calc(100vw - 24px)}
+    .effect-toast.show{opacity:1;transform:translate(-50%,0) scale(1)}
+    .rankup-modal{position:fixed;inset:0;background:#10281fd9;z-index:12000;display:none;align-items:center;justify-content:center;padding:18px;overflow:hidden}
+    .rankup-card{position:relative;z-index:1;isolation:isolate;text-align:center;background:linear-gradient(145deg,#fffdf5,#fff1c5);border:3px solid #f1c34f;border-radius:24px;padding:28px 20px;width:min(100%,420px);box-shadow:0 20px 80px #0005;animation:rankPop .55s cubic-bezier(.2,1.5,.4,1) both}
+    .rankup-card:before{content:'✦  ✧  ✨  ✧  ✦';display:block;color:#d99b18;font-size:24px;letter-spacing:5px;margin-bottom:12px;animation:twinkle 1s ease-in-out infinite alternate}
+    .rankup-label{font-weight:800;color:#9b6b0d;font-size:14px;margin-bottom:8px}
+    .rankup-emoji{font-size:52px;line-height:1.2;margin-bottom:8px;animation:trophyBounce .8s ease-in-out infinite alternate}
+    .rankup-name{font-size:clamp(23px,6vw,30px);font-weight:900;color:#79520b;line-height:1.35;overflow-wrap:anywhere}
+    .rankup-message{color:#79520b;font-size:14px;line-height:1.6;margin:12px 0 18px}
+    .rankup-card button{width:100%;background:#b47b11}
+    .confetti{position:absolute;top:-20px;width:9px;height:15px;background:var(--confetti-color);left:var(--confetti-left);animation:confettiFall var(--confetti-duration) ease-in var(--confetti-delay) forwards;z-index:0;opacity:.95}
+    @keyframes rankPop{from{opacity:0;transform:scale(.65) rotate(-5deg)}to{opacity:1;transform:scale(1) rotate(0)}}
+    @keyframes twinkle{from{opacity:.55;transform:scale(.95)}to{opacity:1;transform:scale(1.06)}}
+    @keyframes trophyBounce{from{transform:translateY(0) rotate(-5deg)}to{transform:translateY(-7px) rotate(5deg)}}
+    @keyframes confettiFall{to{transform:translate3d(var(--confetti-drift),105vh,0) rotate(720deg);opacity:.15}}
+    @media(prefers-reduced-motion:reduce){.title-progress-fill,.effect-toast,.rankup-card,.rankup-card:before,.rankup-emoji,.confetti{animation:none!important;transition:none!important}}
     .entry-actions button{padding:8px 11px;font-size:12px}
     .entry-actions .delete-entry{background:#a83232;color:#fff}
     .tag{display:inline-block;border-radius:99px;background:var(--green2);color:var(--green);font-size:11px;font-weight:700;padding:4px 8px;margin-bottom:7px}
@@ -79,6 +102,11 @@
     <p>万博会場で出会った、おいしい思い出をみんなで地図に残そう！</p>
   </div></header>
   <main>
+    <section class="panel title-panel" aria-live="polite">
+      <div class="title-main"><div class="title-emblem" id="titleEmblem">🍴</div><div><div class="hint" style="color:#946b18;font-weight:700;margin-bottom:3px">あなたのグルメ称号</div><div class="title-name" id="titleName">🍴 グルメ探検隊</div></div></div>
+      <div class="title-meta"><span id="titleCheckedCount">チェックした投稿：0件</span><span id="titleNextGoal">次の称号まであと10件</span></div>
+      <div class="title-progress" aria-label="次の称号までの進捗"><div class="title-progress-fill" id="titleProgressFill"></div></div>
+    </section>
     <section class="panel map-panel">
       <div class="map-tools">
         <h2 class="section-title" style="margin:0">📍 全国グルメマップ</h2>
@@ -98,10 +126,9 @@
       <div class="filters">
         <select id="countryFilter" aria-label="国名で絞り込む"><option value="">すべての国</option></select>
         <select id="sort" aria-label="並び順"><option value="new">新しい投稿順</option><option value="country">国名順</option><option value="dish">料理名順</option></select>
-        <select id="visitedFilter" aria-label="行ったチェックで絞り込む"><option value="all">行った：すべて</option><option value="yes">行った：チェックあり</option><option value="no">行った：チェックなし</option></select>
-        <select id="eatenFilter" aria-label="食べたチェックで絞り込む"><option value="all">食べた：すべて</option><option value="yes">食べた：チェックあり</option><option value="no">食べた：チェックなし</option></select>
+        <select id="personalCheckFilter" aria-label="行った・食べたチェックで絞り込む"><option value="all">行った・食べた：すべて</option><option value="yes">チェックあり</option><option value="no">チェックなし</option></select>
       </div>
-      <p class="hint" style="margin:8px 0 0">「行った」「食べた」のチェックは、このブラウザだけに保存され、ほかの人には共有されません。</p>
+      <p class="hint" style="margin:8px 0 0">「行った／食べた」のチェックは、このブラウザだけに保存され、ほかの人には共有されません。</p>
       <h3 style="font-size:14px;margin:14px 0 0">検索結果（過去の投稿も対象）</h3>
       <div id="entries" class="entries" hidden></div>
       <div class="list-controls"><button id="searchMoreBtn" class="secondary" type="button" hidden>もっと見る（10件）</button></div>
@@ -141,6 +168,16 @@
     ご利用の際は、最新の情報を各自でご確認ください。本サイトの情報は、あくまで参考としてご活用ください。</p>
   </footer>
 
+  <div class="effect-toast" id="effectToast" role="status" aria-live="polite">チェック完了！ ✨</div>
+  <div class="rankup-modal" id="rankupModal" role="dialog" aria-modal="true" aria-labelledby="rankupName">
+    <div class="rankup-card" id="rankupCard">
+      <div class="rankup-label">🎉 称号ランクアップ！ 🎉</div>
+      <div class="rankup-emoji" id="rankupEmoji">⭐</div>
+      <div class="rankup-name" id="rankupName">万博グルメビギナー</div>
+      <p class="rankup-message" id="rankupMessage">新しい称号を獲得しました！</p>
+      <button type="button" id="closeRankupBtn">やったー！</button>
+    </div>
+  </div>
   <div class="modal" id="passwordModal" role="dialog" aria-modal="true" aria-labelledby="passwordTitle">
     <div class="modal-card">
       <h2 id="passwordTitle">🔐 参加者用パスワード</h2>
@@ -213,7 +250,98 @@
     let personalChecks = {};
     try { personalChecks = JSON.parse(localStorage.getItem(personalChecksKey) || '{}') || {}; } catch { personalChecks = {}; }
     function savePersonalChecks() { try { localStorage.setItem(personalChecksKey, JSON.stringify(personalChecks)); } catch (e) { console.warn('個人チェックを保存できませんでした', e); } }
-    function getPersonalCheck(id) { return personalChecks[String(id)] || {visited:false, eaten:false}; }
+    function getPersonalCheck(id) { const value = personalChecks[String(id)]; return typeof value === 'boolean' ? value : !!(value && (value.visited || value.eaten || value.checked)); }
+    const titleRankKey = 'expo-food-map-highest-title-rank-v1';
+    let highestTitleRank = -1;
+    let titleRankInitialized = false;
+    let toastTimer = null;
+    const titleRanks = [
+      {threshold:0, name:'グルメ探検隊', emoji:'🍴'},
+      {threshold:10, name:'万博グルメビギナー', emoji:'🥉'},
+      {threshold:15, name:'万博グルメ探検家', emoji:'🍽️'},
+      {threshold:20, name:'世界のグルメ冒険家', emoji:'🌍'},
+      {threshold:30, name:'万博グルメエキスパート', emoji:'⭐'},
+      {threshold:40, name:'万博グルメマスター', emoji:'💎'},
+      {threshold:50, name:'万博グルメレジェンド', emoji:'👑'},
+      {threshold:Infinity, name:'万博グルメミソロジー', emoji:'🌈'}
+    ];
+    function getCheckedCount() { return records.reduce((n, r) => n + (getPersonalCheck(r.id) ? 1 : 0), 0); }
+    function getCurrentTitleRank() {
+      if (records.length > 0 && getCheckedCount() === records.length) return titleRanks.length - 1;
+      const count = getCheckedCount();
+      let rank = 0;
+      titleRanks.forEach((t, i) => { if (t.threshold !== Infinity && count >= t.threshold) rank = i; });
+      return rank;
+    }
+    function getTitleInfo(rank) { return titleRanks[Math.max(0, Math.min(rank, titleRanks.length - 1))]; }
+    function renderTitleProgress() {
+      const checked = getCheckedCount();
+      const rank = getCurrentTitleRank();
+      const title = getTitleInfo(rank);
+      $('titleEmblem').textContent = title.emoji;
+      $('titleName').textContent = `${title.emoji} ${title.name}`;
+      $('titleCheckedCount').textContent = `チェックした投稿：${checked} / ${records.length}件`;
+      let nextRank = rank + 1;
+      if (rank === titleRanks.length - 1) {
+        $('titleNextGoal').textContent = '🎉 全投稿制覇！最上位称号を獲得！';
+        $('titleProgressFill').style.width = '100%';
+      } else {
+        // 最上位はチェック数ではなく、現在の全投稿にチェックがあることが条件
+        if (rank >= titleRanks.length - 2) {
+          $('titleNextGoal').textContent = `全投稿制覇まであと${Math.max(0, records.length - checked)}件`;
+          $('titleProgressFill').style.width = `${records.length ? Math.min(100, checked / records.length * 100) : 0}%`;
+        } else {
+          const currentThreshold = titleRanks[rank].threshold;
+          const nextThreshold = titleRanks[nextRank].threshold;
+          $('titleNextGoal').textContent = `次の称号まであと${Math.max(0, nextThreshold - checked)}件`;
+          const span = nextThreshold - currentThreshold;
+          $('titleProgressFill').style.width = `${Math.max(0, Math.min(100, span > 0 ? (checked - currentThreshold) / span * 100 : 0))}%`;
+        }
+      }
+      if (!titleRankInitialized) {
+        try { highestTitleRank = Number(localStorage.getItem(titleRankKey)); if (!Number.isFinite(highestTitleRank) || highestTitleRank < 0) highestTitleRank = rank; } catch { highestTitleRank = rank; }
+        highestTitleRank = Math.max(highestTitleRank, rank);
+        try { localStorage.setItem(titleRankKey, String(highestTitleRank)); } catch {}
+        titleRankInitialized = true;
+      }
+    }
+    function showCheckEffect() {
+      const toast = $('effectToast');
+      toast.textContent = '✓ チェック完了！ ✨';
+      toast.classList.remove('show');
+      void toast.offsetWidth;
+      toast.classList.add('show');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('show'), 1500);
+    }
+    function showRankupEffect(rank) {
+      const title = getTitleInfo(rank);
+      $('rankupEmoji').textContent = title.emoji;
+      $('rankupName').textContent = title.name;
+      $('rankupMessage').textContent = rank === titleRanks.length - 1
+        ? 'すべての投稿をチェック！ フードMAP完全制覇、おめでとうございます！'
+        : `チェックした投稿が${getCheckedCount()}件に到達！ 新しい称号を獲得しました。`;
+      const modal = $('rankupModal');
+      modal.querySelectorAll('.confetti').forEach(el => el.remove());
+      const colors = ['#f5c542','#e85d75','#52b788','#4dabf7','#b084f5','#ff914d'];
+      const pieces = rank === titleRanks.length - 1 ? 70 : 38;
+      for (let i = 0; i < pieces; i++) {
+        const piece = document.createElement('i');
+        piece.className = 'confetti';
+        piece.style.setProperty('--confetti-left', `${Math.random() * 100}%`);
+        piece.style.setProperty('--confetti-color', colors[i % colors.length]);
+        piece.style.setProperty('--confetti-duration', `${2.1 + Math.random() * 2.1}s`);
+        piece.style.setProperty('--confetti-delay', `${Math.random() * .7}s`);
+        piece.style.setProperty('--confetti-drift', `${Math.random() * 180 - 90}px`);
+        modal.appendChild(piece);
+      }
+      if (rank === titleRanks.length - 1) $('rankupCard').style.background = 'linear-gradient(145deg,#fffdf5,#f5e6ff 45%,#fff1c5)';
+      else $('rankupCard').style.background = 'linear-gradient(145deg,#fffdf5,#fff1c5)';
+      modal.style.display = 'flex';
+    }
+    function closeRankupEffect() { $('rankupModal').style.display = 'none'; $('rankupModal').querySelectorAll('.confetti').forEach(el => el.remove()); }
+    $('closeRankupBtn').addEventListener('click', closeRankupEffect);
+    $('rankupModal').addEventListener('click', e => { if (e.target === $('rankupModal')) closeRankupEffect(); });
 
     const $ = id => document.getElementById(id);
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
@@ -469,8 +597,8 @@
     function cardHTML(r) {
       const url = safeSiteUrl(r.siteUrl);
       const site = url ? `<p><strong>お店のサイトURL：</strong><br><a class="site-url" href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a></p>` : '';
-      const checks = getPersonalCheck(r.id);
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${site}<p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-personal-check="visited" data-id="${esc(r.id)}" ${checks.visited ? 'checked' : ''}> 🏠 行った</label><label><input type="checkbox" data-personal-check="eaten" data-id="${esc(r.id)}" ${checks.eaten ? 'checked' : ''}> 🍴 食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      const checked = getPersonalCheck(r.id);
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${site}<p><strong>投稿：</strong>${esc(r.nickname)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-personal-check="checked" data-id="${esc(r.id)}" ${checked ? 'checked' : ''}> 🍽️ 行った／食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
 
     async function handleEntryAction(event) {
@@ -527,14 +655,23 @@
       const input = event.target.closest('input[data-personal-check]');
       if (!input) return;
       const id = String(input.dataset.id);
-      const type = input.dataset.personalCheck;
-      const current = getPersonalCheck(id);
-      current[type] = input.checked;
-      personalChecks[id] = current;
+      const previousRank = getCurrentTitleRank();
+      personalChecks[id] = input.checked;
       savePersonalChecks();
       // 同じ投稿が検索結果と最新投稿の両方に表示されている場合も状態を同期
-      document.querySelectorAll(`input[data-personal-check="${type}"][data-id="${CSS.escape(id)}"]`).forEach(el => { if (el !== input) el.checked = input.checked; });
-      if (searchHasRun && ($('visitedFilter').value !== 'all' || $('eatenFilter').value !== 'all')) render();
+      document.querySelectorAll(`input[data-personal-check="checked"][data-id="${CSS.escape(id)}"]`).forEach(el => { if (el !== input) el.checked = input.checked; });
+      const newRank = getCurrentTitleRank();
+      if (input.checked) {
+        showCheckEffect();
+        if (newRank > highestTitleRank) {
+          highestTitleRank = newRank;
+          try { localStorage.setItem(titleRankKey, String(highestTitleRank)); } catch {}
+          // 通常のチェック演出に続けて、ランクアップ専用の豪華な演出を表示
+          showRankupEffect(newRank);
+        }
+      }
+      renderTitleProgress();
+      if (searchHasRun && $('personalCheckFilter').value !== 'all') render();
     }
     $('entries').addEventListener('change', handlePersonalCheckChange);
     $('allEntries').addEventListener('change', handlePersonalCheckChange);
@@ -546,18 +683,17 @@
       const q = $('search').value.trim().toLocaleLowerCase();
       const cf = $('countryFilter').value;
       const sort = $('sort').value;
-      const vf = $('visitedFilter').value;
-      const ef = $('eatenFilter').value;
+      const checkFilter = $('personalCheckFilter').value;
       const filtered = records.filter(r => {
-        const checks = getPersonalCheck(r.id);
-        const matchesVisited = vf === 'all' || (vf === 'yes' ? !!checks.visited : !checks.visited);
-        const matchesEaten = ef === 'all' || (ef === 'yes' ? !!checks.eaten : !checks.eaten);
-        return (!cf || r.country===cf) && matchesVisited && matchesEaten &&
+        const checked = getPersonalCheck(r.id);
+        const matchesCheck = checkFilter === 'all' || (checkFilter === 'yes' ? checked : !checked);
+        return (!cf || r.country===cf) && matchesCheck &&
           [r.nickname,r.country,r.shop,r.dish,r.place,r.siteUrl].some(v=>String(v||'').toLocaleLowerCase().includes(q));
       });
       if (sort==='country') filtered.sort((a,b)=>a.country.localeCompare(b.country,'ja'));
       if (sort==='dish') filtered.sort((a,b)=>a.dish.localeCompare(b.dish,'ja'));
       $('mapCount').textContent = `${records.length}件の投稿`;
+      renderTitleProgress();
       const selected = $('countryFilter').value;
       const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
       $('countryFilter').innerHTML = '<option value="">すべての国</option>' + countries.map(c=>`<option value="${esc(c)}">${esc(c)}</option>`).join('');
@@ -594,8 +730,8 @@
         }
       });
     }
-    ['countryFilter','sort','visitedFilter','eatenFilter'].forEach(id => $(id).addEventListener('change', () => { visiblePostCount = LATEST_PAGE_SIZE; if (searchHasRun) { searchHasRun = true; visibleSearchCount = PAGE_SIZE; } render(); }));
-    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';$('visitedFilter').value='all';$('eatenFilter').value='all';searchHasRun=false;visibleSearchCount=PAGE_SIZE;visiblePostCount=LATEST_PAGE_SIZE;render();});
+    ['countryFilter','sort','personalCheckFilter'].forEach(id => $(id).addEventListener('change', () => { visiblePostCount = LATEST_PAGE_SIZE; if (searchHasRun) { searchHasRun = true; visibleSearchCount = PAGE_SIZE; } render(); }));
+    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';$('personalCheckFilter').value='all';searchHasRun=false;visibleSearchCount=PAGE_SIZE;visiblePostCount=LATEST_PAGE_SIZE;render();});
   </script>
 </body>
 </html>
