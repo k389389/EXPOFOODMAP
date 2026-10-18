@@ -340,10 +340,10 @@
       modal.style.display = 'flex';
     }
     function closeRankupEffect() { $('rankupModal').style.display = 'none'; $('rankupModal').querySelectorAll('.confetti').forEach(el => el.remove()); }
+    const $ = id => document.getElementById(id);
     $('closeRankupBtn').addEventListener('click', closeRankupEffect);
     $('rankupModal').addEventListener('click', e => { if (e.target === $('rankupModal')) closeRankupEffect(); });
 
-    const $ = id => document.getElementById(id);
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const hasConfig = () => firebaseConfigured && window.firebase;
     if (hasConfig()) {
