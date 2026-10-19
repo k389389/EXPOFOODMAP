@@ -464,7 +464,8 @@
         $('shop').value = record.shop || '';
         $('dish').value = record.dish || '';
         $('place').value = record.place || '';
-        $('url').value = record.url || '';
+        // Firebase上のURLフィールド名の表記ゆれにも対応し、編集欄へ確実に読み込む
+        $('url').value = String(record.url ?? record.URL ?? record.websiteUrl ?? record.siteUrl ?? record.website ?? '').trim();
         selectedPin = (Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lng))) ? {lat:Number(record.lat), lng:Number(record.lng)} : null;
         $('pinStatus').textContent = selectedPin ? `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）` : 'ピンの位置：未指定（地図で指定してください）';
         $('submitBtn').textContent = '変更を保存する';
