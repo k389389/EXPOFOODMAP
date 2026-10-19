@@ -58,7 +58,7 @@
     .modal-card button{width:100%;margin-top:10px}
     .error{color:#b42318!important}
     footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 26px;line-height:1.6}
-    .leaflet-popup-content{line-height:1.55}
+    .leaflet-popup-content{line-height:1.55}.entry .dish-name{margin-top:-8px;font-size:14px;color:var(--muted)}
     .picker-modal{position:fixed;inset:0;background:#10281fd9;z-index:10000;display:none;align-items:center;justify-content:center;padding:12px}
     .picker-card{background:#fff;border-radius:18px;padding:14px;width:min(100%,760px);max-height:96dvh;overflow:auto}
     .picker-card h2{margin:2px 0 8px;font-size:20px}
@@ -196,6 +196,7 @@
     ];
     const highestRank = count => rankLevels.filter(x=>count>=x.n).at(-1);
     let previousRanks = {visited:null,eaten:null,venueEaten:null};
+    let ranksInitialized = false;
     function showToast(message, myth=false) { const el=$('toast'); el.textContent=message; el.style.background=myth?'linear-gradient(120deg,#fff1a8,#f8d9ff,#d9f5ff)':'#fff9e8'; el.classList.add('show'); setTimeout(()=>el.classList.remove('show'), myth?4200:1900); }
     function savePersonalChecks(){ localStorage.setItem(personalChecksKey,JSON.stringify(personalChecks)); }
     function isChecked(id,type){ return !!(personalChecks[String(id)] && personalChecks[String(id)][type]); }
@@ -210,9 +211,10 @@
         $(type+'Next').textContent=allDone?'全投稿制覇！おめでとうございます！':next?`次の称号まであと${next.n-count}件（${next.title}）`:`50件達成！全投稿チェックで最上位称号へ`;
         const target=next?next.n:(records.length||count||1); $(type+'Progress').style.width=Math.min(100,count/Math.max(1,target)*100)+'%';
         const rankIndex=allDone?8:rankLevels.indexOf(rank);
-        if(previousRanks[type]!==null && rankIndex>previousRanks[type]) showToast(allDone?'🌈 万博グルメミソロジー獲得！ 全投稿制覇！':`🎉 称号アップ！ ${title}`,allDone);
+        if(ranksInitialized && previousRanks[type]!==null && rankIndex>previousRanks[type]) showToast(allDone?'🌈 万博グルメミソロジー獲得！ 全投稿制覇！':`🎉 称号アップ！ ${title}`,allDone);
         previousRanks[type]=Math.max(previousRanks[type]??rankIndex,rankIndex);
       }
+      ranksInitialized = true;
       const venueCount=records.filter(r=>isChecked(r.id,'venueEaten')).length;
       $('venueEatenCount').textContent=`${venueCount}件`;
     }
@@ -431,12 +433,13 @@
       return date.toLocaleDateString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit'});
     }
     function popupHTML(r) {
-      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}${r.url?`<br><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
+      const url = safeUrl(r.url);
+      return `<strong style="font-size:1.15em">${esc(r.shop)}</strong><br><span>${esc(r.dish)}</span><br>${esc(r.country)}<br>📍 ${esc(r.place)}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
     }
     function safeUrl(value){ try { const u=new URL(String(value||'')); return ['http:','https:'].includes(u.protocol)?u.href:''; } catch { return ''; } }
     function cardHTML(r) {
       const v=isChecked(r.id,'visited'), e=isChecked(r.id,'eaten'), ve=isChecked(r.id,'venueEaten');
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.shop)}</h3><p class="dish-name">${esc(r.dish)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
     function handleCheckChange(event){
       const input=event.target.closest('input[data-check]'); if(!input)return;
