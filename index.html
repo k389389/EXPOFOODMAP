@@ -321,10 +321,7 @@
         setStatus((err.message || '住所を検索できませんでした。') + ' 入力した住所はそのまま保存されます。', true);
       } finally { btn.disabled = false; btn.textContent = '📍 住所から候補を検索・位置を調整'; }
     }
-    $('place').addEventListener('input', () => {
-      selectedPin = null;
-      $('pinStatus').textContent = 'ピンの位置：未指定（住所を変更したため、再度地図で指定してください）';
-    });
+    // 住所欄を変更しても、地図上で指定したピンの位置は保持する。
     $('pickLocationBtn').addEventListener('click', openLocationPicker);
     $('cancelPinBtn').addEventListener('click', () => { $('pickerModal').style.display = 'none'; });
     $('pickerSearchBtn').addEventListener('click', async () => {
