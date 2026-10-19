@@ -45,7 +45,7 @@
     .entry h3{margin:0 0 6px;font-size:16px;overflow-wrap:anywhere}
     .entry p{margin:4px 0;font-size:13px;line-height:1.5;overflow-wrap:anywhere}
     .personal-checks{display:grid;gap:7px;margin-top:10px;padding:9px;background:#f4faf6;border-radius:10px}.personal-checks label{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}.personal-checks input{width:18px;height:18px;accent-color:var(--green)}
-    .rank-panel{border:1px solid #e5d39a;background:#fff9e8;border-radius:12px;padding:10px 12px;margin-bottom:8px}.rank-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rank-label{font-size:12px;color:#805a13;white-space:nowrap}.rank-title{font-weight:800;font-size:15px}.rank-progress{height:8px;background:#eadfbf;border-radius:99px;overflow:hidden;margin:8px 0}.rank-progress span{display:block;height:100%;background:#c58b25;width:0;transition:width .3s}.venue-count-line{display:flex;align-items:center;gap:10px;padding:7px 12px;margin:0 0 8px;color:#555;font-size:14px}.venue-count-line strong{font-size:15px;color:#805a13}.toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-10px);z-index:11000;background:#fff9e8;border:2px solid #e5bd4d;color:#805a13;padding:15px 22px;border-radius:16px;box-shadow:0 10px 35px #0003;text-align:center;font-weight:800;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}.toast.show{opacity:1;transform:translate(-50%,0)}
+    .rank-panel{border-bottom:1px solid var(--line);padding:8px 2px;margin-bottom:4px}.rank-heading{display:flex;align-items:center;gap:8px;flex-wrap:wrap}.rank-label{font-size:13px;color:var(--muted);white-space:nowrap}.rank-title{font-weight:700;font-size:15px}.rank-progress{display:none}.rank-progress span{display:none}.rank-next{display:none}.venue-count-line{display:flex;align-items:center;gap:10px;padding:8px 2px;margin:0;color:#555;font-size:14px}.venue-count-line strong{font-size:15px;color:#805a13}.toast{position:fixed;left:50%;top:18%;transform:translate(-50%,-10px);z-index:11000;background:#fff9e8;border:2px solid #e5bd4d;color:#805a13;padding:15px 22px;border-radius:16px;box-shadow:0 10px 35px #0003;text-align:center;font-weight:800;opacity:0;pointer-events:none;transition:opacity .25s,transform .25s}.toast.show{opacity:1;transform:translate(-50%,0)}
     .entry-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
     .entry-actions button{padding:8px 11px;font-size:12px}
     .entry-actions .delete-entry{background:#a83232;color:#fff}
@@ -77,8 +77,8 @@
   </div></header>
   <main>
     <section class="panel" style="grid-column:1/-1">
-      <div class="rank-panel"><div class="rank-heading"><div class="rank-label">🏠 行ったの称号</div><div id="visitedRank" class="rank-title">🍴 グルメ探検隊</div><div id="visitedCount" class="hint">0件チェック</div></div><div class="rank-progress"><span id="visitedProgress"></span></div><div id="visitedNext" class="hint"></div></div>
-      <div class="rank-panel"><div class="rank-heading"><div class="rank-label">🍴 食べたの称号</div><div id="eatenRank" class="rank-title">🍴 グルメ探検隊</div><div id="eatenCount" class="hint">0件チェック</div></div><div class="rank-progress"><span id="eatenProgress"></span></div><div id="eatenNext" class="hint"></div></div>
+      <div class="rank-panel"><div class="rank-heading"><span class="rank-label">🏠 行った</span><strong id="visitedRank" class="rank-title">グルメ探検隊</strong><span id="visitedCount" class="hint">0件チェック</span></div></div>
+      <div class="rank-panel"><div class="rank-heading"><span class="rank-label">🍴 食べた</span><strong id="eatenRank" class="rank-title">グルメ探検隊</strong><span id="eatenCount" class="hint">0件チェック</span></div></div>
       <div class="venue-count-line"><span>🎪 会場で食べた</span><strong id="venueEatenCount">0件</strong></div>
     </section>
     <section class="panel map-panel">
@@ -191,8 +191,8 @@
     const personalChecksKey = 'expo2025-gourmet-personal-checks-v1';
     let personalChecks = {}; try { personalChecks = JSON.parse(localStorage.getItem(personalChecksKey) || '{}'); } catch { personalChecks = {}; }
     const rankLevels = [
-      {n:0,title:'🍴 グルメ探検隊'}, {n:10,title:'🥉 万博グルメビギナー'}, {n:15,title:'🍽️ 万博グルメ探検家'},
-      {n:20,title:'🌍 世界のグルメ冒険家'}, {n:30,title:'⭐ 万博グルメエキスパート'}, {n:40,title:'💎 万博グルメマスター'}, {n:50,title:'👑 万博グルメレジェンド'}
+      {n:0,title:'グルメ探検隊'}, {n:10,title:'万博グルメビギナー'}, {n:15,title:'万博グルメ探検家'},
+      {n:20,title:'世界のグルメ冒険家'}, {n:30,title:'万博グルメエキスパート'}, {n:40,title:'万博グルメマスター'}, {n:50,title:'万博グルメレジェンド'}
     ];
     const highestRank = count => rankLevels.filter(x=>count>=x.n).at(-1);
     let previousRanks = {visited:null,eaten:null,venueEaten:null};
@@ -204,13 +204,11 @@
         const count=records.filter(r=>isChecked(r.id,type)).length;
         const rank=highestRank(count);
         const allDone=records.length>0 && count===records.length;
-        const title=allDone?'🌈 万博グルメミソロジー':rank.title;
+        const title=allDone?'万博グルメミソロジー':rank.title;
         $(type+'Rank').textContent=title; $(type+'Count').textContent=`${count}件チェック / 全${records.length}投稿`;
-        const next=rankLevels.find(x=>x.n>count);
-        $(type+'Next').textContent=allDone?'全投稿制覇！おめでとうございます！':next?`次の称号まであと${next.n-count}件（${next.title}）`:`50件達成！全投稿チェックで最上位称号へ`;
-        const target=next?next.n:(records.length||count||1); $(type+'Progress').style.width=Math.min(100,count/Math.max(1,target)*100)+'%';
+
         const rankIndex=allDone?8:rankLevels.indexOf(rank);
-        if(previousRanks[type]!==null && rankIndex>previousRanks[type]) showToast(allDone?'🌈 万博グルメミソロジー獲得！ 全投稿制覇！':`🎉 称号アップ！ ${title}`,allDone);
+        if(previousRanks[type]!==null && rankIndex>previousRanks[type]) showToast(allDone?'万博グルメミソロジー獲得！':`称号アップ！ ${title}`,allDone);
         previousRanks[type]=Math.max(previousRanks[type]??rankIndex,rankIndex);
       }
       const venueCount=records.filter(r=>isChecked(r.id,'venueEaten')).length;
