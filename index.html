@@ -103,7 +103,7 @@
         <select id="eatenFilter" aria-label="食べたで絞り込む"><option value="">食べた：すべて</option><option value="yes">食べた</option><option value="no">まだ食べていない</option></select>
         <select id="venueEatenFilter" aria-label="会場で食べたで絞り込む"><option value="">会場で食べた：すべて</option><option value="yes">会場で食べた</option><option value="no">まだ会場で食べていない</option></select>
         <select id="countryFilter" aria-label="国名で絞り込む"><option value="">すべての国</option></select>
-        <select id="sort" aria-label="投稿順"><option value="new">投稿順：新しい順</option><option value="old">投稿順：古い順</option></select>
+        <select id="sort" aria-label="投稿順"><option value="">投稿順：指定なし</option><option value="new">投稿順：新しい順</option><option value="old">投稿順：古い順</option></select>
       </div>
       <h3 style="font-size:14px;margin:14px 0 0">検索結果（過去の投稿も対象）</h3>
       <div id="entries" class="entries"></div>
@@ -117,6 +117,7 @@
           <div class="field"><label for="country">国名 *</label><input id="country" required maxlength="80" placeholder="例：イタリア"></div>
           <div class="field"><label for="shop">店名 *</label><input id="shop" required maxlength="120" placeholder="例：〇〇レストラン"></div>
           <div class="field"><label for="dish">料理名 *</label><input id="dish" required maxlength="120" placeholder="例：マルゲリータ"></div>
+          <div class="field full"><label for="url">お店のURL（任意）</label><input id="url" type="url" maxlength="500" placeholder="https://..."><span class="hint">お店の公式サイトやメニューのURLを入力できます。</span></div>
           <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所は入力した文字のまま保存します。検索で近くにピンを置き、地図上で正しい位置に調整できます。</span></div>
         </div>
         <div class="submit-row"><button id="pickLocationBtn" class="secondary" type="button">📍 住所から候補を検索・位置を調整</button><span id="pinStatus" class="hint">ピンの位置：未指定（投稿前に地図で指定してください）</span></div>
@@ -127,11 +128,11 @@
     <section class="panel list-panel">
       <h2 class="section-title">🍴 投稿されたグルメ</h2>
       <div id="allEntries" class="entries"></div>
-      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（10件）</button></div>
+      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（5件）</button></div>
       <p id="listCount" class="hint" style="text-align:center;margin-bottom:0"></p>
     </section>
   </main>
-  <footer>地図データ © OpenStreetMap contributors</footer>
+  <footer><strong>【ご利用にあたっての注意】</strong><br>掲載されている情報は、最新のものとは限りません。店舗の閉店や移転、メニューの変更・販売終了などにより、実際の状況と異なる場合があります。<br>ご利用の際は、最新の情報を各自でご確認ください。本サイトの情報は、あくまで参考としてご活用ください。<br><br>地図データ © OpenStreetMap contributors</footer>
   <div id="toast" class="toast" aria-live="polite"></div>
 
   <div class="picker-modal" id="pickerModal" role="dialog" aria-modal="true" aria-labelledby="pickerTitle">
@@ -185,7 +186,7 @@
     let pickerMap = null;
     let pickerMarker = null;
     const localKey = 'expo-gourmet-map-demo-v1';
-    const PAGE_SIZE = 10;
+    const PAGE_SIZE = 5;
     let visiblePostCount = PAGE_SIZE;
     const personalChecksKey = 'expo2025-gourmet-personal-checks-v1';
     let personalChecks = {}; try { personalChecks = JSON.parse(localStorage.getItem(personalChecksKey) || '{}'); } catch { personalChecks = {}; }
@@ -372,7 +373,7 @@
       e.preventDefault();
       const post = {
         country:$('country').value.trim(),
-        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim()
+        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim(), url:$('url').value.trim()
       };
       if (Object.values(post).some(v=>!v)) { setStatus('すべての項目を入力してください。', true); return; }
       const btn = $('submitBtn'); btn.disabled = true; setStatus('投稿を保存しています…');
@@ -390,7 +391,7 @@
           if (db && !String(editingId).startsWith('local-')) {
             await db.ref('gourmetPosts/' + editingId).update({
               country:updated.country, shop:updated.shop,
-              dish:updated.dish, place:updated.place, lat:updated.lat, lng:updated.lng,
+              dish:updated.dish, place:updated.place, url:updated.url || '', lat:updated.lat, lng:updated.lng,
               geocodedPlace:updated.geocodedPlace, updatedAt:updated.updatedAt
             });
             setStatus('投稿内容を更新しました。');
@@ -430,11 +431,12 @@
       return date.toLocaleDateString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit'});
     }
     function popupHTML(r) {
-      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
+      return `<strong>${esc(r.dish)}</strong><br>${esc(r.country)} / ${esc(r.shop)}<br>📍 ${esc(r.place)}${r.url?`<br><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
     }
+    function safeUrl(value){ try { const u=new URL(String(value||'')); return ['http:','https:'].includes(u.protocol)?u.href:''; } catch { return ''; } }
     function cardHTML(r) {
       const v=isChecked(r.id,'visited'), e=isChecked(r.id,'eaten'), ve=isChecked(r.id,'venueEaten');
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p><p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.dish)}</h3><p><strong>店名：</strong>${esc(r.shop)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
     function handleCheckChange(event){
       const input=event.target.closest('input[data-check]'); if(!input)return;
@@ -459,6 +461,7 @@
         $('shop').value = record.shop || '';
         $('dish').value = record.dish || '';
         $('place').value = record.place || '';
+        $('url').value = record.url || '';
         selectedPin = (Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lng))) ? {lat:Number(record.lat), lng:Number(record.lng)} : null;
         $('pinStatus').textContent = selectedPin ? `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）` : 'ピンの位置：未指定（地図で指定してください）';
         $('submitBtn').textContent = '変更を保存する';
@@ -501,9 +504,9 @@
         (vf==='' || isChecked(r.id,'visited')===(vf==='yes')) &&
         (ef==='' || isChecked(r.id,'eaten')===(ef==='yes')) &&
         (vef==='' || isChecked(r.id,'venueEaten')===(vef==='yes')) &&
-        [r.country,r.shop,r.dish,r.place].some(v=>String(v||'').toLocaleLowerCase().includes(q))); 
+        [r.country,r.shop,r.dish,r.place,r.url].some(v=>String(v||'').toLocaleLowerCase().includes(q))); 
       if (sort==='old') filtered.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
-      else filtered.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
+      else if (sort==='new') filtered.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
       $('mapCount').textContent = `${records.length}件の投稿`;
       const selected = $('countryFilter').value;
       const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
@@ -512,7 +515,7 @@
       // 検索結果は全投稿を対象に表示し、過去の投稿も検索できます。
       $('entries').innerHTML = filtered.length ? filtered.map(cardHTML).join('') : '<div class="empty">該当するグルメはまだありません。</div>';
 
-      // 通常の投稿一覧は新しい投稿から10件ずつ表示します。
+      // 通常の投稿一覧は新しい投稿から5件ずつ表示します。
       const visibleRecords = records.slice(0, visiblePostCount);
       $('allEntries').innerHTML = visibleRecords.length ? visibleRecords.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
       $('loadMoreBtn').hidden = visiblePostCount >= records.length;
@@ -535,7 +538,7 @@
     ['search','countryFilter','visitedFilter','eatenFilter','venueEatenFilter','sort'].forEach(id => $(id).addEventListener(id==='search'?'input':'change', () => { visiblePostCount = PAGE_SIZE; render(); }));
     $('runSearch').addEventListener('click',()=>{visiblePostCount=PAGE_SIZE;render();});
     $('search').addEventListener('keydown', event => { if(event.key==='Enter'){ event.preventDefault(); visiblePostCount=PAGE_SIZE; render(); } });
-    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';$('visitedFilter').value='';$('eatenFilter').value='';$('venueEatenFilter').value='';visiblePostCount=PAGE_SIZE;render();});
+    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';$('visitedFilter').value='';$('eatenFilter').value='';$('venueEatenFilter').value='';$('sort').value='';visiblePostCount=PAGE_SIZE;render();});
   </script>
 </body>
 </html>
