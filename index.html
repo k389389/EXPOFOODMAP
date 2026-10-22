@@ -69,7 +69,7 @@
     #pickerMap{height:min(55dvh,480px);min-height:280px;border-radius:12px;z-index:1;background:#eaf2ed}
     .picker-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
     .picker-actions button{flex:1}
-    @media(min-width:800px){main{grid-template-columns:minmax(0,1.2fr) minmax(330px,.8fr);align-items:start}.map-panel{grid-column:1/-1}.list-panel{grid-column:1/-1}.form-panel{grid-column:2;grid-row:2}.search-panel{grid-column:1;grid-row:2}#map{height:520px}}
+    @media(min-width:800px){main{grid-template-columns:minmax(0,1.2fr) minmax(330px,.8fr);align-items:start}.map-panel{grid-column:1/-1}.list-panel{grid-column:1/-1}.search-panel{grid-column:1;grid-row:2}#map{height:520px}}
     @media(max-width:480px){main{padding:10px;gap:10px}.panel{padding:13px;border-radius:15px}#map{height:390px}.form-grid{grid-template-columns:1fr}.field.full{grid-column:auto}.entries{grid-template-columns:1fr}.search-row button{padding:12px}.filters{grid-template-columns:1fr 1fr}header{padding:20px 14px}}
   </style>
 </head>
@@ -113,7 +113,13 @@
       <div id="entries" class="entries"></div>
     </section>
 
-    <section class="panel form-panel">
+    <section class="panel list-panel">
+      <h2 class="section-title">🍴 投稿されたグルメ</h2>
+      <div id="allEntries" class="entries"></div>
+      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（5件）</button></div>
+      <p id="listCount" class="hint" style="text-align:center;margin-bottom:0"></p>
+    </section>
+    <section class="panel form-panel" id="postPanel" hidden>
       <h2 class="section-title">✍️ グルメを投稿</h2>
       <p class="hint" style="margin-top:-4px;margin-bottom:14px">万博会場内で見つけたグルメを教えてください。入力した場所をもとに地図へピンを置きます。</p>
       <form id="postForm">
@@ -129,11 +135,9 @@
       </form>
     </section>
 
-    <section class="panel list-panel">
-      <h2 class="section-title">🍴 投稿されたグルメ</h2>
-      <div id="allEntries" class="entries"></div>
-      <div class="list-controls"><button id="loadMoreBtn" class="secondary" type="button" hidden>もっと見る（5件）</button></div>
-      <p id="listCount" class="hint" style="text-align:center;margin-bottom:0"></p>
+    <section class="panel" id="postGatePanel" style="text-align:center">
+      <button id="openPostBtn" type="button" style="min-width:180px">投稿する</button>
+      <p class="hint" style="margin-bottom:0">投稿・編集・削除にはパスワードが必要です。</p>
     </section>
   </main>
   <footer><strong>【ご利用にあたっての注意】</strong><br>掲載されている情報は、最新のものとは限りません。店舗の閉店や移転、メニューの変更・販売終了などにより、実際の状況と異なる場合があります。<br>ご利用の際は、最新の情報を各自でご確認ください。本サイトの情報は、あくまで参考としてご活用ください。<br><br>地図データ © OpenStreetMap contributors</footer>
@@ -229,6 +233,21 @@
 
 
     const $ = id => document.getElementById(id);
+    const POST_PASSWORD = 'Expo2025foodquizkan';
+    function requirePostPassword() {
+      const entered = window.prompt('パスワードを入力してください');
+      if (entered === null) return false;
+      if (entered !== POST_PASSWORD) { window.alert('パスワードが違います。'); return false; }
+      return true;
+    }
+    function revealPostForm() {
+      $('postPanel').hidden = false;
+      $('postGatePanel').hidden = true;
+      $('postForm').scrollIntoView({behavior:'smooth', block:'start'});
+    }
+    $('openPostBtn').addEventListener('click', () => {
+      if (requirePostPassword()) revealPostForm();
+    });
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
     const hasConfig = () => firebaseConfigured && window.firebase;
     if (hasConfig()) {
@@ -493,6 +512,8 @@
       }
 
       if (button.dataset.action === 'edit') {
+        if (!requirePostPassword()) return;
+        revealPostForm();
         editingId = id;
         $('country').value = record.country || '';
         $('shop').value = record.shop || '';
@@ -510,6 +531,7 @@
       }
 
       if (button.dataset.action === 'delete') {
+        if (!requirePostPassword()) return;
         if (!confirm(`「${record.dish}」（${record.shop}）を削除しますか？この操作は取り消せません。`)) return;
         button.disabled = true;
         try {
