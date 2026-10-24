@@ -617,7 +617,7 @@
       records.forEach(r => {
         const lat = Number(r.lat), lng = Number(r.lng);
         if (Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
-          L.marker([lat,lng]).bindPopup(popupHTML(r)).addTo(markerLayer);
+          L.marker([lat,lng]).bindPopup(popupHTML(r), {autoPan:false, closeButton:true, maxWidth:300}).addTo(markerLayer);
         }
       });
     }
