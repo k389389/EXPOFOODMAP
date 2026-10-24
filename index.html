@@ -268,6 +268,7 @@
         db.ref('gourmetPosts').on('value', snap => {
           const value = snap.val() || {};
           records = Object.entries(value).map(([id, v]) => ({...v, id})).sort((a,b)=>(b.createdAt||0)-(a.createdAt||0));
+          refreshOpenPopupContent();
           render();
         }, err => setStatus('Firebaseから読み込めません。設定とDatabaseルールを確認してください。', true));
       } catch (e) { console.error(e); setStatus('Firebase初期化に失敗しました。設定を確認してください。', true); }
@@ -474,6 +475,16 @@
       return `<strong style="font-size:1.15em">${esc(r.shop)}</strong><br><span>${esc(r.dish)}</span><br>${esc(r.country)}<br>📍 ${esc(r.place)}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}<div class="entry-actions reaction-row popup-reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 ${liked?'いいね済み':'いいね'} <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">${favorite?'❤️ お気に入り済み':'♡ お気に入り'}</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">${want?'📍 行きたい済み':'📍 行きたい'}</button></div>`;
     }
     function safeUrl(value){ try { const u=new URL(String(value||'')); return ['http:','https:'].includes(u.protocol)?u.href:''; } catch { return ''; } }
+    // ピンの情報を開いたまま、最新のボタン状態・いいね数だけ更新します。
+    function refreshOpenPopupContent() {
+      const popup = map && map._popup;
+      if (!popup || !popup.isOpen()) return;
+      const source = popup._source;
+      const id = source && source.options && source.options.recordId;
+      if (id == null) return;
+      const record = records.find(r => String(r.id) === String(id));
+      if (record) popup.setContent(popupHTML(record));
+    }
     function cardHTML(r) {
       const v=isChecked(r.id,'visited'), e=isChecked(r.id,'eaten'), ve=isChecked(r.id,'venueEaten');
       const liked = !!(r.likesByUser && r.likesByUser[likeVoterId]);
@@ -503,6 +514,7 @@
         personalLists[String(id)][type] = !personalLists[String(id)][type];
         if (!personalLists[String(id)].favorite && !personalLists[String(id)].want) delete personalLists[String(id)];
         savePersonalLists();
+        refreshOpenPopupContent();
         render();
         return;
       }
@@ -526,6 +538,7 @@
             record.likes = Math.max(0, (Number(record.likes) || 0) + (nextLiked ? 1 : -1));
             localStorage.setItem(localKey, JSON.stringify(records));
           }
+          refreshOpenPopupContent();
           render();
         } catch (err) {
           setStatus('いいねを登録できませんでした。FirebaseのDatabaseルールと通信状況を確認してください。', true);
@@ -615,15 +628,21 @@
     // 地図の表示範囲内の投稿だけピンを生成し、パン・ズーム時に表示分を更新
     function renderMapPins() {
       if (!map || !markerLayer) return;
+      // ポップアップを開いている間はピンを再生成しない（操作中に閉じないようにする）
+      if (map._popup && map._popup.isOpen()) return;
       markerLayer.clearLayers();
       const bounds = map.getBounds();
       records.forEach(r => {
         const lat = Number(r.lat), lng = Number(r.lng);
         if (Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
-          L.marker([lat,lng]).bindPopup(popupHTML(r), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300}).addTo(markerLayer);
+          const marker = L.marker([lat,lng]);
+          marker.options.recordId = r.id;
+          marker.bindPopup(popupHTML(r), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300});
+          marker.addTo(markerLayer);
         }
       });
     }
+    map.on('popupclose', () => renderMapPins());
     ['countryFilter','visitedFilter','eatenFilter','venueEatenFilter','sort'].forEach(id => $(id).addEventListener('change', () => { hasSearched = true; visiblePostCount = PAGE_SIZE; render(); }));
     $('runSearch').addEventListener('click',()=>{hasSearched=true;visiblePostCount=PAGE_SIZE;render();});
     $('search').addEventListener('keydown', event => { if(event.key==='Enter'){ event.preventDefault(); hasSearched=true; visiblePostCount=PAGE_SIZE; render(); } });
