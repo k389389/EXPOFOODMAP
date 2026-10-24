@@ -66,7 +66,7 @@
     .modal-card button{width:100%;margin-top:10px}
     .error{color:#b42318!important}
     footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 26px;line-height:1.6}
-    .leaflet-popup-content{line-height:1.55}.entry .dish-name{margin-top:-8px;font-size:14px;color:var(--muted)}
+    .leaflet-popup-content{line-height:1.55}.leaflet-popup-content .popup-reaction-row{flex-wrap:wrap;gap:5px;margin-top:8px}.leaflet-popup-content .popup-reaction-row button{padding:6px 7px;font-size:11px}.entry .dish-name{margin-top:-8px;font-size:14px;color:var(--muted)}
     .picker-modal{position:fixed;inset:0;background:#10281fd9;z-index:10000;display:none;align-items:center;justify-content:center;padding:12px}
     .picker-card{background:#fff;border-radius:18px;padding:14px;width:min(100%,760px);max-height:96dvh;overflow:auto}
     .picker-card h2{margin:2px 0 8px;font-size:20px}
@@ -466,7 +466,9 @@
     }
     function popupHTML(r) {
       const url = safeUrl(r.url);
-      return `<strong style="font-size:1.15em">${esc(r.shop)}</strong><br><span>${esc(r.dish)}</span><br>${esc(r.country)}<br>📍 ${esc(r.place)}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}`;
+      const liked = !!(r.likesByUser && r.likesByUser[likeVoterId]);
+      const favorite = isInPersonalList(r.id, 'favorite'), want = isInPersonalList(r.id, 'want');
+      return `<strong style="font-size:1.15em">${esc(r.shop)}</strong><br><span>${esc(r.dish)}</span><br>${esc(r.country)}<br>📍 ${esc(r.place)}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}<div class="entry-actions reaction-row popup-reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 ${liked?'いいね済み':'いいね'} <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">${favorite?'❤️ お気に入り済み':'♡ お気に入り'}</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">${want?'📍 行きたい済み':'📍 行きたい'}</button></div>`;
     }
     function safeUrl(value){ try { const u=new URL(String(value||'')); return ['http:','https:'].includes(u.protocol)?u.href:''; } catch { return ''; } }
     function cardHTML(r) {
@@ -571,6 +573,8 @@
     }
     $('entries').addEventListener('click', handleEntryAction);
     $('allEntries').addEventListener('click', handleEntryAction);
+    // 地図ピンのポップアップ内の操作も、投稿一覧と同じ処理で受け付けます。
+    map.getContainer().addEventListener('click', handleEntryAction);
     $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += PAGE_SIZE; render(); });
     function render() {
       const q = $('search').value.trim().toLocaleLowerCase();
