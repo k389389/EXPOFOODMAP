@@ -189,7 +189,10 @@
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     const markerLayer = L.layerGroup().addTo(map);
-    map.on('moveend zoomend', renderMapPins);
+    map.on('moveend zoomend', () => {
+      // ポップアップを画面内に収めるための自動移動中は、ピンを再生成して閉じない
+      if (!map._popup || !map._popup.isOpen()) renderMapPins();
+    });
     let db = null;
     let records = [];
     let sessionUnlocked = true;
@@ -617,7 +620,7 @@
       records.forEach(r => {
         const lat = Number(r.lat), lng = Number(r.lng);
         if (Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
-          L.marker([lat,lng]).bindPopup(popupHTML(r), {autoPan:false, closeButton:true, maxWidth:300}).addTo(markerLayer);
+          L.marker([lat,lng]).bindPopup(popupHTML(r), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300}).addTo(markerLayer);
         }
       });
     }
