@@ -48,6 +48,10 @@
     .rank-panel{border:1px solid #e5d39a;background:#fff9e8;border-radius:12px;padding:10px 12px;margin-bottom:8px}.rank-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rank-label{font-size:12px;color:#805a13;white-space:nowrap}.rank-title{font-weight:800;font-size:15px}.rank-progress{height:8px;background:#eadfbf;border-radius:99px;overflow:hidden;margin:8px 0}.rank-progress span{display:block;height:100%;background:#c58b25;width:0;transition:width .3s}.venue-count-line{display:flex;align-items:center;gap:10px;padding:7px 12px;margin:0 0 8px;color:#555;font-size:14px}.venue-count-line strong{font-size:15px;color:#805a13}.toast{white-space:pre-line;position:fixed;left:50%;top:14%;transform:translate(-50%,-18px) scale(.82);z-index:11000;background:linear-gradient(135deg,#fff9d7,#ffe7a8,#fff);border:3px solid #e5bd4d;color:#805a13;padding:28px 34px;border-radius:24px;box-shadow:0 16px 55px #0004;text-align:center;font-weight:900;font-size:clamp(22px,5vw,34px);line-height:1.35;max-width:min(92vw,560px);width:max-content;opacity:0;pointer-events:none;transition:opacity .3s,transform .35s cubic-bezier(.2,1.4,.4,1);text-shadow:0 1px #fff}.toast.show{opacity:1;transform:translate(-50%,0) scale(1)}.toast.celebrate{animation:toast-glow 1s ease-in-out infinite alternate}.toast.celebrate::after{content:'✨ 🎉 ✨';display:block;font-size:clamp(22px,5vw,32px);margin-top:10px}@keyframes toast-glow{from{box-shadow:0 12px 35px #e7b83c66,0 0 0 0 #f8d66a00}to{box-shadow:0 16px 55px #e7b83caa,0 0 0 8px #f8d66a33}}@media(max-width:480px){.toast{padding:23px 22px;border-radius:20px}}
     .entry-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
     .entry-actions button{padding:8px 11px;font-size:12px}
+    .entry-actions.reaction-row{display:flex;gap:5px;flex-wrap:nowrap;align-items:center}
+    .entry-actions.reaction-row button{padding:8px 7px;font-size:11px;white-space:nowrap;flex:0 1 auto;min-width:0}
+    .entry-actions button.personal-list-button{background:#f1f5f3;color:#52665d;border:1px solid #dce8e1}
+    .entry-actions button.personal-list-button.selected{background:#fff0f5;color:#a32959;border:1px solid #e9a2bd;box-shadow:0 0 0 2px #e9a2bd26}
     .entry-actions button.like-button{background:#f1f5f3;color:#52665d;border:1px solid #dce8e1}
     .entry-actions button.like-button.liked{background:#dff3e8;color:#087348;border:1px solid #67bd91;box-shadow:0 0 0 2px #67bd9126}
     .like-count{font-weight:800;color:#52665d;margin-left:3px}
@@ -107,7 +111,7 @@
         <select id="eatenFilter" aria-label="食べたで絞り込む"><option value="">食べた：すべて</option><option value="yes">食べた</option><option value="no">まだ食べていない</option></select>
         <select id="venueEatenFilter" aria-label="会場で食べたで絞り込む"><option value="">会場で食べた：すべて</option><option value="yes">会場で食べた</option><option value="no">まだ会場で食べていない</option></select>
         <select id="countryFilter" aria-label="国名で絞り込む"><option value="">すべての国</option></select>
-        <select id="sort" aria-label="投稿順"><option value="">投稿順：指定なし</option><option value="new">投稿順：新しい順</option><option value="old">投稿順：古い順</option><option value="likes">いいね順</option></select>
+        <select id="sort" aria-label="投稿順"><option value="">投稿順：指定なし</option><option value="new">投稿順：新しい順</option><option value="old">投稿順：古い順</option><option value="likes">いいね順</option><option value="favorites">お気に入り順</option><option value="wants">行きたい順</option></select>
       </div>
       <h3 style="font-size:14px;margin:14px 0 0">検索結果（過去の投稿も対象）</h3>
       <div id="entries" class="entries"></div>
@@ -198,6 +202,10 @@
     let visiblePostCount = PAGE_SIZE;
     let hasSearched = false;
     const personalChecksKey = 'expo2025-gourmet-personal-checks-v1';
+    const personalListsKey = 'expo2025-gourmet-personal-lists-v1';
+    let personalLists = {}; try { personalLists = JSON.parse(localStorage.getItem(personalListsKey) || '{}'); } catch { personalLists = {}; }
+    function isInPersonalList(id, type) { return !!(personalLists[String(id)] && personalLists[String(id)][type]); }
+    function savePersonalLists() { localStorage.setItem(personalListsKey, JSON.stringify(personalLists)); }
     const likeVoterKey = 'expo2025-gourmet-like-voter-v1';
     let likeVoterId = localStorage.getItem(likeVoterKey);
     if (!likeVoterId) { likeVoterId = 'v' + Array.from(crypto.getRandomValues(new Uint8Array(16)), b => b.toString(16).padStart(2,'0')).join(''); localStorage.setItem(likeVoterKey, likeVoterId); }
@@ -464,7 +472,8 @@
     function cardHTML(r) {
       const v=isChecked(r.id,'visited'), e=isChecked(r.id,'eaten'), ve=isChecked(r.id,'venueEaten');
       const liked = !!(r.likesByUser && r.likesByUser[likeVoterId]);
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.shop)}</h3><p class="dish-name">${esc(r.dish)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 ${liked?'いいね済み':'いいね'} <span class="like-count">${Number(r.likes)||0}</span></button></div><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      const favorite = isInPersonalList(r.id, 'favorite'), want = isInPersonalList(r.id, 'want');
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.shop)}</h3><p class="dish-name">${esc(r.dish)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 ${liked?'いいね済み':'いいね'} <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">${favorite?'❤️ お気に入り済み':'♡ お気に入り'}</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">${want?'📍 行きたい済み':'📍 行きたい'}</button></div><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
     function handleCheckChange(event){
       const input=event.target.closest('input[data-check]'); if(!input)return;
@@ -482,6 +491,16 @@
       const id = button.dataset.id;
       const record = records.find(r => String(r.id) === String(id));
       if (!record) { setStatus('投稿が見つかりません。画面を更新してください。', true); return; }
+
+      if (button.dataset.action === 'favorite' || button.dataset.action === 'want') {
+        const type = button.dataset.action;
+        if (!personalLists[String(id)]) personalLists[String(id)] = {};
+        personalLists[String(id)][type] = !personalLists[String(id)][type];
+        if (!personalLists[String(id)].favorite && !personalLists[String(id)].want) delete personalLists[String(id)];
+        savePersonalLists();
+        render();
+        return;
+      }
 
       if (button.dataset.action === 'like') {
         button.disabled = true;
@@ -567,7 +586,9 @@
         [r.country,r.shop,r.dish,r.place,r.url].some(v=>String(v||'').toLocaleLowerCase().includes(q))); 
       if (sort==='old') filtered.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
       else if (sort==='new') filtered.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
-      else if (sort==='likes') filtered.sort((a,b)=>(Number(b.likes)||0)-(Number(a.likes)||0));
+       else if (sort==='likes') filtered.sort((a,b)=>(Number(b.likes)||0)-(Number(a.likes)||0));
+       else if (sort==='favorites') filtered.sort((a,b)=>Number(isInPersonalList(b.id,'favorite'))-Number(isInPersonalList(a.id,'favorite')) || Number(b.createdAt||0)-Number(a.createdAt||0));
+       else if (sort==='wants') filtered.sort((a,b)=>Number(isInPersonalList(b.id,'want'))-Number(isInPersonalList(a.id,'want')) || Number(b.createdAt||0)-Number(a.createdAt||0));
       $('mapCount').textContent = `${records.length}件の投稿`;
       const selected = $('countryFilter').value;
       const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
