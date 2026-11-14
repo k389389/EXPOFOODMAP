@@ -107,7 +107,8 @@
         <button id="runSearch" type="button">検索</button>
         <button id="clearSearch" class="secondary" type="button">クリア</button>
       </div>
-      <p class="hint" style="margin:6px 0 0">※店名は、検索しやすいようにアルファベットではなくカタカナを使用しています。</p>
+      <p class="hint" style="margin:6px 0 0">※店名は、検索しやすいようにアルファベットではなくカタカナを使用しています。
+地名で検索すると、MAPがその周辺に拡大されます。</p>
       <div class="filters">
         <select id="visitedFilter" aria-label="行ったで絞り込む"><option value="">行った：すべて</option><option value="yes">行った</option><option value="no">まだ行っていない</option></select>
         <select id="eatenFilter" aria-label="食べたで絞り込む"><option value="">食べた：すべて</option><option value="yes">食べた</option><option value="no">まだ食べていない</option></select>
@@ -664,29 +665,59 @@
     map.on('popupclose', () => renderMapPins());
     ['countryFilter','visitedFilter','eatenFilter','venueEatenFilter','sort'].forEach(id => $(id).addEventListener('change', () => { hasSearched = true; visiblePostCount = PAGE_SIZE; render(); }));
 
+    function zoomToSearchResults(results, fallbackCenter=null) {
+      const points = results
+        .map(r => [Number(r.lat), Number(r.lng)])
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+      if (points.length === 1) {
+        map.setView(points[0], 14);
+      } else if (points.length > 1) {
+        const bounds = L.latLngBounds(points);
+        const center = bounds.getCenter();
+        const northEast = bounds.getNorthEast();
+        const southWest = bounds.getSouthWest();
+        const spread = map.distance(northEast, southWest);
+        if (spread < 30) map.setView(center, 14);
+        else map.fitBounds(bounds, {padding:[48,48], maxZoom:14});
+      } else if (fallbackCenter) {
+        map.setView([fallbackCenter.lat, fallbackCenter.lng], 14);
+      }
+    }
+
     async function executeSearch() {
       const query = $('search').value.trim();
       hasSearched = true;
       visiblePostCount = PAGE_SIZE;
       activeSearchLocation = null;
 
-      if (query) {
-        const button = $('runSearch');
-        button.disabled = true;
-        button.textContent = '検索中…';
-        try {
-          // 地名として見つかった場合は、その地点の周辺投稿を検索します。
-          const location = await geocode(query);
-          activeSearchLocation = {lat: location.lat, lng: location.lng, displayName: location.displayName};
-          map.setView([location.lat, location.lng], 14);
-        } catch (err) {
-          // 地名として見つからない場合は、従来のキーワード検索に切り替えます。
-        } finally {
-          button.disabled = false;
-          button.textContent = '検索';
+      const button = $('runSearch');
+      button.disabled = true;
+      button.textContent = '検索中…';
+      try {
+        // まず店名・国名などの文字検索を行い、該当店があれば全ピンが見える範囲に調整します。
+        render();
+        if (query && displayedFilteredRecords.length) {
+          zoomToSearchResults(displayedFilteredRecords);
+          return;
         }
+
+        if (query) {
+          // 投稿に一致しない場合は地名として検索し、その周辺の投稿を表示します。
+          try {
+            const location = await geocode(query);
+            activeSearchLocation = {lat: location.lat, lng: location.lng, displayName: location.displayName};
+            render();
+            zoomToSearchResults(displayedFilteredRecords, location);
+            return;
+          } catch (err) {
+            // 地名として見つからない場合は、文字検索結果（該当なし）を表示します。
+          }
+        }
+        render();
+      } finally {
+        button.disabled = false;
+        button.textContent = '検索';
       }
-      render();
     }
 
     $('runSearch').addEventListener('click', executeSearch);
