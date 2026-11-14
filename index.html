@@ -37,6 +37,13 @@
     .field.full{grid-column:1/-1}
     .hint{font-size:12px;color:var(--muted);line-height:1.5}
     .submit-row{display:flex;align-items:center;gap:12px;margin-top:14px;flex-wrap:wrap}
+    .other-stores-panel{margin-top:16px;padding:12px;border:1px solid var(--line);border-radius:12px;background:#f8fcf9}
+    .other-stores-heading{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;margin-bottom:10px}
+    .other-store-row{border:1px solid #dce8e1;background:#fff;border-radius:10px;padding:10px;margin:8px 0}
+    .other-store-row .field{margin-bottom:8px}
+    .other-store-row .other-store-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+    .other-store-row button{padding:8px 11px;font-size:12px}
+    .other-store-row .remove-other-store{background:#fff0f0;color:#a83232;border:1px solid #f0caca}
     #status{font-size:13px;color:var(--muted);line-height:1.5}
     .entries{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
     .list-controls{display:flex;justify-content:center;margin-top:14px}
@@ -83,7 +90,8 @@
   <header><div class="head-inner">
     <div class="eyebrow">EXPO2025 FOOD COMMUNITY MAP</div>
     <h1>🍽️ アフター万博グルメMAP</h1>
-    <p>万博グルメの思い出を記録に残そう！</p>
+    <p>万博グルメの思い出を記録に残そう！
+<br><small>※記録はブラウザに保存されます。</small></p>
   </div></header>
   <main>
     <section class="panel" style="grid-column:1/-1">
@@ -138,6 +146,11 @@
           <div class="field full"><label for="place">場所 *</label><input id="place" required maxlength="180" placeholder="例：大阪府大阪市此花区 〇〇館内"><span class="hint">住所は入力した文字のまま保存します。検索で近くにピンを置き、地図上で正しい位置に調整できます。</span></div>
         </div>
         <div class="submit-row"><button id="pickLocationBtn" class="secondary" type="button">📍 住所から候補を検索・位置を調整</button><span id="pinStatus" class="hint">ピンの位置：未指定（投稿前に地図で指定してください）</span></div>
+        <div class="other-stores-panel">
+          <div class="other-stores-heading"><strong>🏬 他店舗（任意）</strong><span class="hint">同じ商品を扱う別店舗を追加できます。</span></div>
+          <div id="otherStoresFields"></div>
+          <button id="addOtherStoreBtn" class="secondary" type="button">＋ 他店舗を追加</button>
+        </div>
         <div class="submit-row"><button id="submitBtn" type="submit">地図に投稿する</button><button id="cancelEditBtn" class="secondary" type="button" hidden>編集をキャンセル</button><span id="status" role="status">投稿できます。</span></div>
       </form>
     </section>
@@ -201,6 +214,9 @@
     let sessionUnlocked = true;
     let editingId = null;
     let selectedPin = null;
+    let pickerPin = null;
+    let pickerTarget = {type:'primary'};
+    let otherStoresDraft = [];
     let pickerMap = null;
     let pickerMarker = null;
     const localKey = 'expo-gourmet-map-demo-v1';
@@ -337,11 +353,12 @@
     }
 
     function updatePickerCoords(latlng) {
-      selectedPin = {lat:Number(latlng.lat), lng:Number(latlng.lng)};
-      $('pickerCoords').textContent = `選択中：緯度 ${selectedPin.lat.toFixed(6)} / 経度 ${selectedPin.lng.toFixed(6)}`;
+      pickerPin = {lat:Number(latlng.lat), lng:Number(latlng.lng)};
+      $('pickerCoords').textContent = `選択中：緯度 ${pickerPin.lat.toFixed(6)} / 経度 ${pickerPin.lng.toFixed(6)}`;
     }
 
     async function openLocationPicker() {
+      pickerTarget = {type:'primary'};
       const place = $('place').value.trim();
       if (!place) { setStatus('先に場所（住所や施設名）を入力してください。', true); $('place').focus(); return; }
       const btn = $('pickLocationBtn'); btn.disabled = true; btn.textContent = '住所を検索中…';
@@ -366,8 +383,68 @@
         setStatus((err.message || '住所を検索できませんでした。') + ' 入力した住所はそのまま保存されます。', true);
       } finally { btn.disabled = false; btn.textContent = '📍 住所から候補を検索・位置を調整'; }
     }
+    async function openOtherLocationPicker(index) {
+      syncOtherStoresDraftFromForm();
+      const store = otherStoresDraft[index];
+      if (!store) return;
+      if (!store.place.trim()) { setStatus('他店舗の場所を入力してください。', true); return; }
+      pickerTarget = {type:'other', index};
+      const btn = document.querySelector(`[data-other-action="pin"][data-index="${index}"]`);
+      if (btn) { btn.disabled = true; btn.textContent = '住所を検索中…'; }
+      $('pickerSearchInput').value = store.place.trim();
+      try {
+        const geo = await geocode(store.place.trim());
+        if (!pickerMap) {
+          pickerMap = L.map('pickerMap').setView([geo.lat, geo.lng], 17);
+          L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(pickerMap);
+          pickerMap.on('click', e => { if (pickerMarker) pickerMarker.setLatLng(e.latlng); updatePickerCoords(e.latlng); });
+        }
+        $('pickerModal').style.display = 'flex';
+        pickerMap.setView([geo.lat, geo.lng], 17);
+        if (!pickerMarker) {
+          pickerMarker = L.marker([geo.lat, geo.lng], {draggable:true}).addTo(pickerMap);
+          pickerMarker.on('dragend', e => updatePickerCoords(e.target.getLatLng()));
+        } else pickerMarker.setLatLng([geo.lat, geo.lng]);
+        updatePickerCoords({lat:geo.lat,lng:geo.lng});
+        setTimeout(() => pickerMap.invalidateSize(), 100);
+      } catch (err) {
+        setStatus((err.message || '住所を検索できませんでした。') + ' 場所を短くするか、地図を直接動かしてください。', true);
+      } finally {
+        if (btn) { btn.disabled = false; btn.textContent = '📍 ピンを設定'; }
+      }
+    }
+
     // 住所欄を変更しても、地図上で指定したピンの位置は保持する。
     $('pickLocationBtn').addEventListener('click', openLocationPicker);
+    $('otherStoresFields').addEventListener('click', event => {
+      const pinButton = event.target.closest('[data-other-action="pin"]');
+      const removeButton = event.target.closest('[data-other-action="remove"]');
+      if (pinButton) openOtherLocationPicker(Number(pinButton.dataset.index));
+      if (removeButton) {
+        syncOtherStoresDraftFromForm();
+        otherStoresDraft.splice(Number(removeButton.dataset.index), 1);
+        renderOtherStoresForm();
+      }
+    });
+    $('otherStoresFields').addEventListener('input', event => {
+      const row = event.target.closest('.other-store-row');
+      if (!row) return;
+      const index = Number(row.dataset.index);
+      if (!otherStoresDraft[index]) return;
+      if (event.target.classList.contains('other-shop')) otherStoresDraft[index].shop = event.target.value;
+      if (event.target.classList.contains('other-place')) {
+        otherStoresDraft[index].place = event.target.value;
+        otherStoresDraft[index].lat = null; otherStoresDraft[index].lng = null;
+        const status = row.querySelector('.other-pin-status');
+        if (status) status.textContent = 'ピン：未指定';
+      }
+    });
+    $('addOtherStoreBtn').addEventListener('click', () => {
+      syncOtherStoresDraftFromForm();
+      otherStoresDraft.push({shop:'', place:'', lat:null, lng:null});
+      renderOtherStoresForm();
+      $('otherStoresFields').lastElementChild?.scrollIntoView({behavior:'smooth',block:'nearest'});
+    });
     $('cancelPinBtn').addEventListener('click', () => { $('pickerModal').style.display = 'none'; });
     $('pickerSearchBtn').addEventListener('click', async () => {
       const query = $('pickerSearchInput').value.trim();
@@ -393,21 +470,50 @@
     $('pickerSearchInput').addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); $('pickerSearchBtn').click(); } });
 
     $('confirmPinBtn').addEventListener('click', () => {
-      if (!selectedPin) { $('pickerCoords').textContent = '先に地図上で位置を選んでください。'; return; }
-      $('pinStatus').textContent = `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）`;
+      if (!pickerPin) { $('pickerCoords').textContent = '先に地図上で位置を選んでください。'; return; }
+      if (pickerTarget.type === 'other') {
+        const store = otherStoresDraft[pickerTarget.index];
+        if (!store) return;
+        store.lat = pickerPin.lat; store.lng = pickerPin.lng;
+        renderOtherStoresForm();
+      } else {
+        selectedPin = {...pickerPin};
+        $('pinStatus').textContent = `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）`;
+      }
       $('pickerModal').style.display = 'none';
       setStatus('位置を設定しました。内容を確認して投稿してください。');
     });
+
+    function syncOtherStoresDraftFromForm() {
+      document.querySelectorAll('.other-store-row').forEach(row => {
+        const index = Number(row.dataset.index);
+        if (!otherStoresDraft[index]) return;
+        otherStoresDraft[index].shop = row.querySelector('.other-shop')?.value.trim() || '';
+        otherStoresDraft[index].place = row.querySelector('.other-place')?.value.trim() || '';
+      });
+    }
+
+    function renderOtherStoresForm() {
+      $('otherStoresFields').innerHTML = otherStoresDraft.map((store, index) => `
+        <div class="other-store-row" data-index="${index}">
+          <div class="field"><label>他店舗の店名 *</label><input class="other-shop" maxlength="120" value="${esc(store.shop || '')}" placeholder="例：〇〇店"></div>
+          <div class="field"><label>場所 *</label><input class="other-place" maxlength="180" value="${esc(store.place || '')}" placeholder="例：大阪府大阪市北区"></div>
+          <div class="other-store-actions"><button type="button" class="secondary" data-other-action="pin" data-index="${index}">📍 ピンを設定</button><span class="hint other-pin-status">${store.lat != null && store.lng != null && Number.isFinite(Number(store.lat)) && Number.isFinite(Number(store.lng)) ? `ピン：設定済み（${Number(store.lat).toFixed(5)}, ${Number(store.lng).toFixed(5)}）` : 'ピン：未指定'}</span><button type="button" class="remove-other-store" data-other-action="remove" data-index="${index}">削除</button></div>
+        </div>`).join('');
+    }
 
     function resetEditMode() {
       editingId = null;
       selectedPin = null;
       $('pinStatus').textContent = 'ピンの位置：未指定（投稿前に地図で指定してください）';
       $('postForm').reset();
+      otherStoresDraft = [];
+      renderOtherStoresForm();
       $('submitBtn').textContent = '地図に投稿する';
       $('cancelEditBtn').hidden = true;
     }
 
+    renderOtherStoresForm();
     $('cancelEditBtn').addEventListener('click', () => {
       resetEditMode();
       setStatus('編集をキャンセルしました。');
@@ -415,11 +521,16 @@
 
     $('postForm').addEventListener('submit', async e => {
       e.preventDefault();
+      syncOtherStoresDraftFromForm();
       const post = {
         country:$('country').value.trim(),
-        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim(), url:$('url').value.trim()
+        shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim(), url:$('url').value.trim(),
+        otherStores: otherStoresDraft.map(store => ({shop:String(store.shop || '').trim(), place:String(store.place || '').trim(), lat:store.lat == null ? null : Number(store.lat), lng:store.lng == null ? null : Number(store.lng)}))
       };
-      if (Object.values(post).some(v=>!v)) { setStatus('すべての項目を入力してください。', true); return; }
+      if (post.otherStores.some(store => !store.shop || !store.place || !Number.isFinite(store.lat) || !Number.isFinite(store.lng))) {
+        setStatus('他店舗を追加した場合は、店名・場所・ピンをすべて設定してください。', true); return;
+      }
+      if (Object.entries(post).filter(([key])=>key!=='otherStores').some(([,v])=>!v)) { setStatus('すべての項目を入力してください。', true); return; }
       const btn = $('submitBtn'); btn.disabled = true; setStatus('投稿を保存しています…');
       try {
         if (!selectedPin) {
@@ -436,7 +547,7 @@
             await db.ref('gourmetPosts/' + editingId).update({
               country:updated.country, shop:updated.shop,
               dish:updated.dish, place:updated.place, url:updated.url || '', lat:updated.lat, lng:updated.lng,
-              geocodedPlace:updated.geocodedPlace, updatedAt:updated.updatedAt
+              geocodedPlace:updated.geocodedPlace, otherStores:updated.otherStores || [], updatedAt:updated.updatedAt
             });
             setStatus('投稿内容を更新しました。');
           } else {
@@ -459,6 +570,8 @@
             setStatus('デモ投稿を追加しました。この端末だけに保存されています。Firebase設定後は全員で共有できます。');
           }
           $('postForm').reset();
+          otherStoresDraft = [];
+          renderOtherStoresForm();
           selectedPin = null;
           $('pinStatus').textContent = 'ピンの位置：未指定（投稿前に地図で指定してください）';
         }
@@ -474,12 +587,14 @@
       if (Number.isNaN(date.getTime())) return '日時不明';
       return date.toLocaleDateString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit'});
     }
-    function popupHTML(r) {
+    function popupHTML(r, store=null) {
       const url = safeUrl(r.url);
+      const displayShop = store?.shop || r.shop;
+      const displayPlace = store?.place || r.place;
       const liked = !!(r.likesByUser && r.likesByUser[likeVoterId]);
       const favorite = isInPersonalList(r.id, 'favorite'), want = isInPersonalList(r.id, 'want');
       const visited = isChecked(r.id, 'visited'), eaten = isChecked(r.id, 'eaten'), venueEaten = isChecked(r.id, 'venueEaten');
-      return `<strong style="font-size:1.15em">${esc(r.shop)}</strong><br><span>${esc(r.dish)}</span><br>${esc(r.country)}<br>📍 ${esc(r.place)}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}<div class="personal-checks popup-personal-checks"><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${eaten?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${visited?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${venueEaten?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions reaction-row popup-reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 いいね <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">♡ お気に入り</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">📍 行きたい</button></div>`;
+      return `<strong style="font-size:1.15em">${esc(displayShop)}</strong><br><span>${esc(r.dish)}</span><br>${esc(r.country)}<br>📍 ${esc(displayPlace)}${url?`<br><a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a>`:''}<br>投稿日：${esc(formatPostDate(r.createdAt))}<div class="personal-checks popup-personal-checks"><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${eaten?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${visited?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${venueEaten?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions reaction-row popup-reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 いいね <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">♡ お気に入り</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">📍 行きたい</button></div>`;
     }
     function safeUrl(value){ try { const u=new URL(String(value||'')); return ['http:','https:'].includes(u.protocol)?u.href:''; } catch { return ''; } }
     // ピンの情報を開いたまま、最新のボタン状態・いいね数だけ更新します。
@@ -490,13 +605,16 @@
       const id = source && source.options && source.options.recordId;
       if (id == null) return;
       const record = records.find(r => String(r.id) === String(id));
-      if (record) popup.setContent(popupHTML(record));
+      if (record) {
+        const branch = source.options.branchStore || null;
+        popup.setContent(popupHTML(record, branch));
+      }
     }
     function cardHTML(r) {
       const v=isChecked(r.id,'visited'), e=isChecked(r.id,'eaten'), ve=isChecked(r.id,'venueEaten');
       const liked = !!(r.likesByUser && r.likesByUser[likeVoterId]);
       const favorite = isInPersonalList(r.id, 'favorite'), want = isInPersonalList(r.id, 'want');
-      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.shop)}</h3><p class="dish-name">${esc(r.dish)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 いいね <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">♡ お気に入り</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">📍 行きたい</button></div><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
+      return `<article class="entry"><span class="tag">${esc(r.country)}</span><h3>${esc(r.shop)}</h3><p class="dish-name">${esc(r.dish)}</p><p><strong>場所：</strong>${esc(r.place)}</p>${Array.isArray(r.otherStores) && r.otherStores.length ? `<p><strong>他店舗：</strong>${r.otherStores.map(store=>`${esc(store.shop)}（${esc(store.place)}）`).join('、')}</p>` : ''}${safeUrl(r.url)?`<p><strong>お店のURL：</strong><a href="${esc(safeUrl(r.url))}" target="_blank" rel="noopener noreferrer">${esc(r.url)}</a></p>`:''}<p><strong>投稿日：</strong>${esc(formatPostDate(r.createdAt))}</p><div class="entry-actions reaction-row"><button type="button" class="like-button ${liked?'liked':''}" data-action="like" data-id="${esc(r.id)}" aria-pressed="${liked?'true':'false'}">👍 いいね <span class="like-count">${Number(r.likes)||0}</span></button><button type="button" class="personal-list-button ${favorite?'selected':''}" data-action="favorite" data-id="${esc(r.id)}" aria-pressed="${favorite?'true':'false'}">♡ お気に入り</button><button type="button" class="personal-list-button ${want?'selected':''}" data-action="want" data-id="${esc(r.id)}" aria-pressed="${want?'true':'false'}">📍 行きたい</button></div><div class="personal-checks"><label><input type="checkbox" data-check="visited" data-id="${esc(r.id)}" ${v?'checked':''}> 🏠 行った</label><label><input type="checkbox" data-check="eaten" data-id="${esc(r.id)}" ${e?'checked':''}> 🍴 食べた</label><label><input type="checkbox" data-check="venueEaten" data-id="${esc(r.id)}" ${ve?'checked':''}> 🎪 会場で食べた</label></div><div class="entry-actions"><button type="button" class="secondary" data-action="edit" data-id="${esc(r.id)}">編集</button><button type="button" class="delete-entry" data-action="delete" data-id="${esc(r.id)}">削除</button></div></article>`;
     }
     function handleCheckChange(event){
       const input=event.target.closest('input[data-check]'); if(!input)return;
@@ -565,6 +683,8 @@
         $('place').value = record.place || '';
         // Firebase上のURLフィールド名の表記ゆれにも対応し、編集欄へ確実に読み込む
         $('url').value = String(record.url ?? record.URL ?? record.websiteUrl ?? record.siteUrl ?? record.website ?? '').trim();
+        otherStoresDraft = Array.isArray(record.otherStores) ? record.otherStores.map(store => ({shop:store.shop || '', place:store.place || '', lat:store.lat == null ? null : Number(store.lat), lng:store.lng == null ? null : Number(store.lng)})) : [];
+        renderOtherStoresForm();
         selectedPin = (Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lng))) ? {lat:Number(record.lat), lng:Number(record.lng)} : null;
         $('pinStatus').textContent = selectedPin ? `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）` : 'ピンの位置：未指定（地図で指定してください）';
         $('submitBtn').textContent = '変更を保存する';
@@ -614,14 +734,21 @@
       const ef = $('eatenFilter').value;
       const vef = $('venueEatenFilter').value;
       const sort = $('sort').value;
-      const filtered = records.filter(r => (!cf || r.country===cf) &&
-        (vf==='' || isChecked(r.id,'visited')===(vf==='yes')) &&
-        (ef==='' || isChecked(r.id,'eaten')===(ef==='yes')) &&
-        (vef==='' || isChecked(r.id,'venueEaten')===(vef==='yes')) &&
-        (activeSearchLocation
-          ? (Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng)) &&
-             distanceMeters(activeSearchLocation.lat, activeSearchLocation.lng, Number(r.lat), Number(r.lng)) <= SEARCH_RADIUS_METERS)
-          : [r.country,r.shop,r.dish,r.place,r.url].some(v=>String(v||'').toLocaleLowerCase().includes(q))));
+      const filtered = records.filter(r => {
+        const baseFilters = (!cf || r.country===cf) &&
+          (vf==='' || isChecked(r.id,'visited')===(vf==='yes')) &&
+          (ef==='' || isChecked(r.id,'eaten')===(ef==='yes')) &&
+          (vef==='' || isChecked(r.id,'venueEaten')===(vef==='yes'));
+        if (!baseFilters) return false;
+        const stores = [{lat:r.lat,lng:r.lng,shop:r.shop,place:r.place}, ...(Array.isArray(r.otherStores) ? r.otherStores : [])];
+        if (activeSearchLocation) {
+          return stores.some(store => store.lat != null && store.lng != null &&
+            Number.isFinite(Number(store.lat)) && Number.isFinite(Number(store.lng)) &&
+            distanceMeters(activeSearchLocation.lat, activeSearchLocation.lng, Number(store.lat), Number(store.lng)) <= SEARCH_RADIUS_METERS);
+        }
+        return [r.country,r.shop,r.dish,r.place,r.url].some(v=>String(v||'').toLocaleLowerCase().includes(q)) ||
+          stores.some(store => [store.shop,store.place].some(v=>String(v||'').toLocaleLowerCase().includes(q)));
+      });
       if (sort==='old') filtered.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
       else if (sort==='new') filtered.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
        else if (sort==='likes') filtered.sort((a,b)=>(Number(b.likes)||0)-(Number(a.likes)||0));
@@ -653,21 +780,26 @@
       markerLayer.clearLayers();
       const bounds = map.getBounds();
       displayedFilteredRecords.forEach(r => {
-        const lat = Number(r.lat), lng = Number(r.lng);
-        if (Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
-          const marker = L.marker([lat,lng]);
-          marker.options.recordId = r.id;
-          marker.bindPopup(popupHTML(r), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300});
-          marker.addTo(markerLayer);
-        }
+        const stores = [{shop:r.shop, place:r.place, lat:r.lat, lng:r.lng, primary:true}, ...(Array.isArray(r.otherStores) ? r.otherStores : [])];
+        stores.forEach(store => {
+          const lat = Number(store.lat), lng = Number(store.lng);
+          if (store.lat != null && store.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
+            const marker = L.marker([lat,lng]);
+            marker.options.recordId = r.id;
+            if (!store.primary) marker.options.branchStore = {shop:store.shop, place:store.place};
+            marker.bindPopup(popupHTML(r, store.primary ? null : store), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300});
+            marker.addTo(markerLayer);
+          }
+        });
       });
     }
     map.on('popupclose', () => renderMapPins());
     ['countryFilter','visitedFilter','eatenFilter','venueEatenFilter','sort'].forEach(id => $(id).addEventListener('change', () => { hasSearched = true; visiblePostCount = PAGE_SIZE; render(); }));
 
     function zoomToSearchResults(results, fallbackCenter=null) {
-      const points = results
-        .map(r => [Number(r.lat), Number(r.lng)])
+      const points = results.flatMap(r => [{lat:r.lat,lng:r.lng}, ...(Array.isArray(r.otherStores) ? r.otherStores : [])])
+        .filter(store => store.lat != null && store.lng != null)
+        .map(store => [Number(store.lat), Number(store.lng)])
         .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
       if (points.length === 1) {
         map.setView(points[0], 14);
