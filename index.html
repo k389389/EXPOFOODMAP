@@ -432,6 +432,7 @@
       const index = Number(row.dataset.index);
       if (!otherStoresDraft[index]) return;
       if (event.target.classList.contains('other-shop')) otherStoresDraft[index].shop = event.target.value;
+      if (event.target.classList.contains('other-url')) otherStoresDraft[index].url = event.target.value;
       if (event.target.classList.contains('other-place')) {
         otherStoresDraft[index].place = event.target.value;
         otherStoresDraft[index].lat = null; otherStoresDraft[index].lng = null;
@@ -441,7 +442,7 @@
     });
     $('addOtherStoreBtn').addEventListener('click', () => {
       syncOtherStoresDraftFromForm();
-      otherStoresDraft.push({shop:'', place:'', lat:null, lng:null});
+      otherStoresDraft.push({shop:'', place:'', url:'', lat:null, lng:null});
       renderOtherStoresForm();
       $('otherStoresFields').lastElementChild?.scrollIntoView({behavior:'smooth',block:'nearest'});
     });
@@ -489,6 +490,7 @@
         const index = Number(row.dataset.index);
         if (!otherStoresDraft[index]) return;
         otherStoresDraft[index].shop = row.querySelector('.other-shop')?.value.trim() || '';
+        otherStoresDraft[index].url = row.querySelector('.other-url')?.value.trim() || '';
         otherStoresDraft[index].place = row.querySelector('.other-place')?.value.trim() || '';
       });
     }
@@ -498,6 +500,7 @@
         <div class="other-store-row" data-index="${index}">
           <div class="field"><label>他店舗の店名 *</label><input class="other-shop" maxlength="120" value="${esc(store.shop || '')}" placeholder="例：〇〇店"></div>
           <div class="field"><label>場所 *</label><input class="other-place" maxlength="180" value="${esc(store.place || '')}" placeholder="例：大阪府大阪市北区"></div>
+          <div class="field"><label>他店舗のURL（任意）</label><input class="other-url" type="url" maxlength="500" value="${esc(store.url || '')}" placeholder="https://..."></div>
           <div class="other-store-actions"><button type="button" class="secondary" data-other-action="pin" data-index="${index}">📍 ピンを設定</button><span class="hint other-pin-status">${store.lat != null && store.lng != null && Number.isFinite(Number(store.lat)) && Number.isFinite(Number(store.lng)) ? `ピン：設定済み（${Number(store.lat).toFixed(5)}, ${Number(store.lng).toFixed(5)}）` : 'ピン：未指定'}</span><button type="button" class="remove-other-store" data-other-action="remove" data-index="${index}">削除</button></div>
         </div>`).join('');
     }
@@ -525,7 +528,7 @@
       const post = {
         country:$('country').value.trim(),
         shop:$('shop').value.trim(), dish:$('dish').value.trim(), place:$('place').value.trim(), url:$('url').value.trim(),
-        otherStores: otherStoresDraft.map(store => ({shop:String(store.shop || '').trim(), place:String(store.place || '').trim(), lat:store.lat == null ? null : Number(store.lat), lng:store.lng == null ? null : Number(store.lng)}))
+        otherStores: otherStoresDraft.map(store => ({shop:String(store.shop || '').trim(), place:String(store.place || '').trim(), url:String(store.url || '').trim(), lat:store.lat == null ? null : Number(store.lat), lng:store.lng == null ? null : Number(store.lng)}))
       };
       if (post.otherStores.some(store => !store.shop || !store.place || !Number.isFinite(store.lat) || !Number.isFinite(store.lng))) {
         setStatus('他店舗を追加した場合は、店名・場所・ピンをすべて設定してください。', true); return;
@@ -588,6 +591,10 @@
       return date.toLocaleDateString('ja-JP', {year:'numeric', month:'2-digit', day:'2-digit'});
     }
     function popupHTML(r, store=null) {
+      if (store && store.isOtherStore) {
+        const branchUrl = safeUrl(store.url);
+        return `<strong style="font-size:1.15em">${esc(store.shop || r.shop)}</strong><br>${esc(r.dish)}<br>${esc(r.country)}<br>📍 ${esc(store.place || '')}${branchUrl ? `<br><a href="${esc(branchUrl)}" target="_blank" rel="noopener noreferrer">${esc(store.url)}</a>` : ''}`;
+      }
       const url = safeUrl(r.url);
       const displayShop = store?.shop || r.shop;
       const displayPlace = store?.place || r.place;
@@ -683,7 +690,7 @@
         $('place').value = record.place || '';
         // Firebase上のURLフィールド名の表記ゆれにも対応し、編集欄へ確実に読み込む
         $('url').value = String(record.url ?? record.URL ?? record.websiteUrl ?? record.siteUrl ?? record.website ?? '').trim();
-        otherStoresDraft = Array.isArray(record.otherStores) ? record.otherStores.map(store => ({shop:store.shop || '', place:store.place || '', lat:store.lat == null ? null : Number(store.lat), lng:store.lng == null ? null : Number(store.lng)})) : [];
+        otherStoresDraft = Array.isArray(record.otherStores) ? record.otherStores.map(store => ({shop:store.shop || '', place:store.place || '', url:store.url || '', lat:store.lat == null ? null : Number(store.lat), lng:store.lng == null ? null : Number(store.lng)})) : [];
         renderOtherStoresForm();
         selectedPin = (Number.isFinite(Number(record.lat)) && Number.isFinite(Number(record.lng))) ? {lat:Number(record.lat), lng:Number(record.lng)} : null;
         $('pinStatus').textContent = selectedPin ? `ピンの位置：指定済み（${selectedPin.lat.toFixed(5)}, ${selectedPin.lng.toFixed(5)}）` : 'ピンの位置：未指定（地図で指定してください）';
@@ -780,13 +787,13 @@
       markerLayer.clearLayers();
       const bounds = map.getBounds();
       displayedFilteredRecords.forEach(r => {
-        const stores = [{shop:r.shop, place:r.place, lat:r.lat, lng:r.lng, primary:true}, ...(Array.isArray(r.otherStores) ? r.otherStores : [])];
+        const stores = [{shop:r.shop, place:r.place, lat:r.lat, lng:r.lng, primary:true}, ...(Array.isArray(r.otherStores) ? r.otherStores.map(store=>({...store,isOtherStore:true})) : [])];
         stores.forEach(store => {
           const lat = Number(store.lat), lng = Number(store.lng);
           if (store.lat != null && store.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
-            const marker = L.marker([lat,lng]);
+            const marker = store.primary ? L.marker([lat,lng]) : L.circleMarker([lat,lng], {radius:9, color:'#c62828', fillColor:'#e53935', fillOpacity:1, weight:2});
             marker.options.recordId = r.id;
-            if (!store.primary) marker.options.branchStore = {shop:store.shop, place:store.place};
+            if (!store.primary) marker.options.branchStore = {shop:store.shop, place:store.place, url:store.url, isOtherStore:true};
             marker.bindPopup(popupHTML(r, store.primary ? null : store), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300});
             marker.addTo(markerLayer);
           }
