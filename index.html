@@ -76,6 +76,7 @@
     .error{color:#b42318!important}
     footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 26px;line-height:1.6}
     .leaflet-popup-content{line-height:1.55}.leaflet-popup-content .popup-reaction-row{flex-wrap:wrap;gap:5px;margin-top:8px}.leaflet-popup-content .popup-reaction-row button{padding:6px 7px;font-size:11px}.entry .dish-name{margin-top:-8px;font-size:14px;color:var(--muted)}
+    .other-store-red-pin{filter:hue-rotate(145deg) saturate(2.2)}
     .picker-modal{position:fixed;inset:0;background:#10281fd9;z-index:10000;display:none;align-items:center;justify-content:center;padding:12px}
     .picker-card{background:#fff;border-radius:18px;padding:14px;width:min(100%,760px);max-height:96dvh;overflow:auto}
     .picker-card h2{margin:2px 0 8px;font-size:20px}
@@ -791,7 +792,7 @@
         stores.forEach(store => {
           const lat = Number(store.lat), lng = Number(store.lng);
           if (store.lat != null && store.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
-            const marker = store.primary ? L.marker([lat,lng]) : L.circleMarker([lat,lng], {radius:9, color:'#c62828', fillColor:'#e53935', fillOpacity:1, weight:2});
+            const marker = store.primary ? L.marker([lat,lng]) : L.marker([lat,lng], {icon:new L.Icon.Default({className:'other-store-red-pin'})});
             marker.options.recordId = r.id;
             if (!store.primary) marker.options.branchStore = {shop:store.shop, place:store.place, url:store.url, isOtherStore:true};
             marker.bindPopup(popupHTML(r, store.primary ? null : store), {autoPan:true, autoPanPadding:[24,24], autoPanPaddingTopLeft:[24,24], autoPanPaddingBottomRight:[24,24], closeButton:true, maxWidth:300});
