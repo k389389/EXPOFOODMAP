@@ -97,7 +97,7 @@
         <span class="count" id="mapCount">0件の投稿</span>
       </div>
       <div id="map" aria-label="グルメ投稿の地図"></div>
-      <p class="map-caption">ピンを押すと投稿内容を確認できます。地図は拡大・縮小できます。場所は「大阪府大阪市〜」のように入力してください。</p>
+      <p class="map-caption">ピンを押すと投稿内容を確認できます。地図は拡大・縮小できます。</p>
     </section>
 
     <section class="panel search-panel">
@@ -206,6 +206,9 @@
     const PAGE_SIZE = 5;
     let visiblePostCount = PAGE_SIZE;
     let hasSearched = false;
+    let activeSearchLocation = null;
+    let displayedFilteredRecords = [];
+    const SEARCH_RADIUS_METERS = 3000;
     const personalChecksKey = 'expo2025-gourmet-personal-checks-v1';
     const personalListsKey = 'expo2025-gourmet-personal-lists-v1';
     let personalLists = {}; try { personalLists = JSON.parse(localStorage.getItem(personalListsKey) || '{}'); } catch { personalLists = {}; }
@@ -595,6 +598,14 @@
     // 地図ピンのポップアップ内の操作も、投稿一覧と同じ処理で受け付けます。
     map.getContainer().addEventListener('click', handleEntryAction);
     $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += PAGE_SIZE; render(); });
+    function distanceMeters(lat1, lng1, lat2, lng2) {
+      const rad = value => value * Math.PI / 180;
+      const dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
+      const a = Math.sin(dLat / 2) ** 2 +
+        Math.cos(rad(lat1)) * Math.cos(rad(lat2)) * Math.sin(dLng / 2) ** 2;
+      return 6371000 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    }
+
     function render() {
       const q = $('search').value.trim().toLocaleLowerCase();
       const cf = $('countryFilter').value;
@@ -606,12 +617,16 @@
         (vf==='' || isChecked(r.id,'visited')===(vf==='yes')) &&
         (ef==='' || isChecked(r.id,'eaten')===(ef==='yes')) &&
         (vef==='' || isChecked(r.id,'venueEaten')===(vef==='yes')) &&
-        [r.country,r.shop,r.dish,r.place,r.url].some(v=>String(v||'').toLocaleLowerCase().includes(q))); 
+        (activeSearchLocation
+          ? (Number.isFinite(Number(r.lat)) && Number.isFinite(Number(r.lng)) &&
+             distanceMeters(activeSearchLocation.lat, activeSearchLocation.lng, Number(r.lat), Number(r.lng)) <= SEARCH_RADIUS_METERS)
+          : [r.country,r.shop,r.dish,r.place,r.url].some(v=>String(v||'').toLocaleLowerCase().includes(q))));
       if (sort==='old') filtered.sort((a,b)=>Number(a.createdAt||0)-Number(b.createdAt||0));
       else if (sort==='new') filtered.sort((a,b)=>Number(b.createdAt||0)-Number(a.createdAt||0));
        else if (sort==='likes') filtered.sort((a,b)=>(Number(b.likes)||0)-(Number(a.likes)||0));
        else if (sort==='favorites') filtered.sort((a,b)=>Number(isInPersonalList(b.id,'favorite'))-Number(isInPersonalList(a.id,'favorite')) || Number(b.createdAt||0)-Number(a.createdAt||0));
        else if (sort==='wants') filtered.sort((a,b)=>Number(isInPersonalList(b.id,'want'))-Number(isInPersonalList(a.id,'want')) || Number(b.createdAt||0)-Number(a.createdAt||0));
+      displayedFilteredRecords = filtered;
       $('mapCount').textContent = `${records.length}件の投稿`;
       const selected = $('countryFilter').value;
       const countries = [...new Set(records.map(r=>r.country).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'ja'));
@@ -620,11 +635,12 @@
       // 検索結果は全投稿を対象に表示し、過去の投稿も検索できます。
       $('entries').innerHTML = !hasSearched ? '' : (filtered.length ? filtered.map(cardHTML).join('') : '<div class="empty">該当するグルメはまだありません。</div>');
 
-      // 通常の投稿一覧は新しい投稿から5件ずつ表示します。
-      const visibleRecords = records.slice(0, visiblePostCount);
-      $('allEntries').innerHTML = visibleRecords.length ? visibleRecords.map(cardHTML).join('') : '<div class="empty">最初のグルメを投稿してください！</div>';
-      $('loadMoreBtn').hidden = visiblePostCount >= records.length;
-      $('listCount').textContent = records.length ? `${visibleRecords.length}件 / 全${records.length}件を表示中` : '';
+      // 地名検索中は、通常の投稿一覧も周辺のお店だけに絞り込みます。
+      const listSource = activeSearchLocation ? filtered : records;
+      const visibleRecords = listSource.slice(0, visiblePostCount);
+      $('allEntries').innerHTML = visibleRecords.length ? visibleRecords.map(cardHTML).join('') : (activeSearchLocation ? '<div class="empty">検索した場所の周辺に投稿はありません。</div>' : '<div class="empty">最初のグルメを投稿してください！</div>');
+      $('loadMoreBtn').hidden = visiblePostCount >= listSource.length;
+      $('listCount').textContent = listSource.length ? `${visibleRecords.length}件 / 全${listSource.length}件を表示中` : '';
       renderMapPins();
       updateRanks();
     }
@@ -635,7 +651,7 @@
       if (map._popup && map._popup.isOpen()) return;
       markerLayer.clearLayers();
       const bounds = map.getBounds();
-      records.forEach(r => {
+      displayedFilteredRecords.forEach(r => {
         const lat = Number(r.lat), lng = Number(r.lng);
         if (Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
           const marker = L.marker([lat,lng]);
@@ -647,9 +663,43 @@
     }
     map.on('popupclose', () => renderMapPins());
     ['countryFilter','visitedFilter','eatenFilter','venueEatenFilter','sort'].forEach(id => $(id).addEventListener('change', () => { hasSearched = true; visiblePostCount = PAGE_SIZE; render(); }));
-    $('runSearch').addEventListener('click',()=>{hasSearched=true;visiblePostCount=PAGE_SIZE;render();});
-    $('search').addEventListener('keydown', event => { if(event.key==='Enter'){ event.preventDefault(); hasSearched=true; visiblePostCount=PAGE_SIZE; render(); } });
-    $('clearSearch').addEventListener('click',()=>{$('search').value='';$('countryFilter').value='';$('visitedFilter').value='';$('eatenFilter').value='';$('venueEatenFilter').value='';$('sort').value='';hasSearched=false;visiblePostCount=PAGE_SIZE;render();});
+
+    async function executeSearch() {
+      const query = $('search').value.trim();
+      hasSearched = true;
+      visiblePostCount = PAGE_SIZE;
+      activeSearchLocation = null;
+
+      if (query) {
+        const button = $('runSearch');
+        button.disabled = true;
+        button.textContent = '検索中…';
+        try {
+          // 地名として見つかった場合は、その地点の周辺投稿を検索します。
+          const location = await geocode(query);
+          activeSearchLocation = {lat: location.lat, lng: location.lng, displayName: location.displayName};
+          map.setView([location.lat, location.lng], 14);
+        } catch (err) {
+          // 地名として見つからない場合は、従来のキーワード検索に切り替えます。
+        } finally {
+          button.disabled = false;
+          button.textContent = '検索';
+        }
+      }
+      render();
+    }
+
+    $('runSearch').addEventListener('click', executeSearch);
+    $('search').addEventListener('keydown', event => {
+      if (event.key === 'Enter') { event.preventDefault(); executeSearch(); }
+    });
+    $('clearSearch').addEventListener('click',()=>{
+      $('search').value='';$('countryFilter').value='';$('visitedFilter').value='';
+      $('eatenFilter').value='';$('venueEatenFilter').value='';$('sort').value='';
+      activeSearchLocation=null;hasSearched=false;visiblePostCount=PAGE_SIZE;
+      map.setView([36.2048, 138.2529], 5);
+      render();
+    });
   </script>
 </body>
 </html>
