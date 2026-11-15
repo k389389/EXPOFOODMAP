@@ -444,10 +444,8 @@
       if (event.target.classList.contains('other-shop')) otherStoresDraft[index].shop = event.target.value;
       if (event.target.classList.contains('other-url')) otherStoresDraft[index].url = event.target.value;
       if (event.target.classList.contains('other-place')) {
+        // 住所を編集しても、設定済みのピン座標は保持する。
         otherStoresDraft[index].place = event.target.value;
-        otherStoresDraft[index].lat = null; otherStoresDraft[index].lng = null;
-        const status = row.querySelector('.other-pin-status');
-        if (status) status.textContent = 'ピン：未指定';
       }
     });
     $('addOtherStoreBtn').addEventListener('click', () => {
