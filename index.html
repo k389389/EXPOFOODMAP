@@ -791,7 +791,11 @@
         const stores = [{shop:r.shop, place:r.place, lat:r.lat, lng:r.lng, primary:true}, ...(Array.isArray(r.otherStores) ? r.otherStores.map(store=>({...store,isOtherStore:true})) : [])];
         stores.forEach(store => {
           const lat = Number(store.lat), lng = Number(store.lng);
-          if (store.lat != null && store.lng != null && Number.isFinite(lat) && Number.isFinite(lng) && bounds.contains([lat,lng])) {
+          const hasCoords = store.lat != null && store.lng != null && Number.isFinite(lat) && Number.isFinite(lng);
+          // 地名検索中は、投稿カードに登録された他店舗も検索地点から3km以内のピンだけ表示する。
+          const withinSearchRadius = !activeSearchLocation || (hasCoords &&
+            distanceMeters(activeSearchLocation.lat, activeSearchLocation.lng, lat, lng) <= SEARCH_RADIUS_METERS);
+          if (hasCoords && withinSearchRadius && bounds.contains([lat,lng])) {
             const marker = store.primary ? L.marker([lat,lng]) : L.marker([lat,lng], {icon:new L.Icon.Default({className:'other-store-red-pin'})});
             marker.options.recordId = r.id;
             if (!store.primary) marker.options.branchStore = {shop:store.shop, place:store.place, url:store.url, isOtherStore:true};
@@ -808,7 +812,10 @@
       const points = results.flatMap(r => [{lat:r.lat,lng:r.lng}, ...(Array.isArray(r.otherStores) ? r.otherStores : [])])
         .filter(store => store.lat != null && store.lng != null)
         .map(store => [Number(store.lat), Number(store.lng)])
-        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng));
+        .filter(([lat, lng]) => Number.isFinite(lat) && Number.isFinite(lng))
+        // 地名検索なら検索地点から3km以内の店舗だけで地図の表示範囲を決める。
+        .filter(([lat, lng]) => !activeSearchLocation ||
+          distanceMeters(activeSearchLocation.lat, activeSearchLocation.lng, lat, lng) <= SEARCH_RADIUS_METERS);
       if (points.length === 1) {
         map.setView(points[0], 14);
       } else if (points.length > 1) {
