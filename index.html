@@ -826,6 +826,7 @@
 
     async function executeSearch() {
       const query = $('search').value.trim();
+      const normalizedQuery = query.toLocaleLowerCase();
       hasSearched = true;
       visiblePostCount = PAGE_SIZE;
       activeSearchLocation = null;
@@ -834,26 +835,44 @@
       button.disabled = true;
       button.textContent = '検索中…';
       try {
-        // まず店名・国名などの文字検索を行い、該当店があれば全ピンが見える範囲に調整します。
-        render();
-        if (query && displayedFilteredRecords.length) {
-          zoomToSearchResults(displayedFilteredRecords);
+        if (!query) {
+          render();
           return;
         }
 
-        if (query) {
-          // 投稿に一致しない場合は地名として検索し、その周辺の投稿を表示します。
-          try {
-            const location = await geocode(query);
-            activeSearchLocation = {lat: location.lat, lng: location.lng, displayName: location.displayName};
-            render();
-            zoomToSearchResults(displayedFilteredRecords, location);
-            return;
-          } catch (err) {
-            // 地名として見つからない場合は、文字検索結果（該当なし）を表示します。
-          }
+        // 国名は「その国のパビリオンで提供されていたお店」の検索として扱う。
+        const isCountrySearch = records.some(r => String(r.country || '').trim().toLocaleLowerCase() === normalizedQuery);
+        if (isCountrySearch) {
+          render();
+          if (displayedFilteredRecords.length) zoomToSearchResults(displayedFilteredRecords);
+          return;
+        }
+
+        // 店名・料理名・URLに一致し、場所欄には一致しない場合は文字検索を優先する。
+        // 場所欄にも一致する語（例：「梅田」）は地名として先に解決し、検索地点の近くに地図を絞る。
+        const matchesPlaceText = records.some(r => {
+          const places = [r.place, ...(Array.isArray(r.otherStores) ? r.otherStores.map(store => store.place) : [])];
+          return places.some(value => String(value || '').toLocaleLowerCase().includes(normalizedQuery));
+        });
+        const matchesNonPlaceText = records.some(r => [r.shop, r.dish, r.url].some(value => String(value || '').toLocaleLowerCase().includes(normalizedQuery)));
+        if (!matchesPlaceText && matchesNonPlaceText) {
+          render();
+          if (displayedFilteredRecords.length) zoomToSearchResults(displayedFilteredRecords);
+          return;
+        }
+
+        // 地名として先に検索。地名が見つかったら検索地点から3km以内の店舗だけを地図・一覧に表示する。
+        try {
+          const location = await geocode(query);
+          activeSearchLocation = {lat: location.lat, lng: location.lng, displayName: location.displayName};
+          render();
+          zoomToSearchResults(displayedFilteredRecords, location);
+          return;
+        } catch (err) {
+          // 地名として見つからない場合は、店名・料理名・場所などの文字検索に戻す。
         }
         render();
+        if (displayedFilteredRecords.length) zoomToSearchResults(displayedFilteredRecords);
       } finally {
         button.disabled = false;
         button.textContent = '検索';
