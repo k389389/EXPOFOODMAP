@@ -206,6 +206,15 @@
       maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
     }).addTo(map);
     const markerLayer = L.layerGroup().addTo(map);
+    // 検索直後は検索地点周辺だけを表示し、ユーザーが地図を動かしたら全投稿のピンを表示する。
+    let mapBrowsingAllPins = false;
+    map.on('dragstart', () => { mapBrowsingAllPins = true; });
+    map.on('zoomstart', event => { if (event && event.originalEvent) mapBrowsingAllPins = true; });
+    map.getContainer().addEventListener('wheel', () => { mapBrowsingAllPins = true; }, {passive:true});
+    map.getContainer().addEventListener('touchstart', event => { if (event.touches && event.touches.length > 1) mapBrowsingAllPins = true; }, {passive:true});
+    map.getContainer().addEventListener('click', event => {
+      if (event.target && event.target.closest && event.target.closest('.leaflet-control-zoom a')) mapBrowsingAllPins = true;
+    });
     map.on('moveend zoomend', () => {
       // ポップアップを画面内に収めるための自動移動中は、ピンを再生成して閉じない
       if (!map._popup || !map._popup.isOpen()) renderMapPins();
@@ -787,13 +796,14 @@
       if (map._popup && map._popup.isOpen()) return;
       markerLayer.clearLayers();
       const bounds = map.getBounds();
-      displayedFilteredRecords.forEach(r => {
+      const pinRecords = mapBrowsingAllPins ? records : displayedFilteredRecords;
+      pinRecords.forEach(r => {
         const stores = [{shop:r.shop, place:r.place, lat:r.lat, lng:r.lng, primary:true}, ...(Array.isArray(r.otherStores) ? r.otherStores.map(store=>({...store,isOtherStore:true})) : [])];
         stores.forEach(store => {
           const lat = Number(store.lat), lng = Number(store.lng);
           const hasCoords = store.lat != null && store.lng != null && Number.isFinite(lat) && Number.isFinite(lng);
-          // 地名検索中は、投稿カードに登録された他店舗も検索地点から3km以内のピンだけ表示する。
-          const withinSearchRadius = !activeSearchLocation || (hasCoords &&
+          // 検索直後は検索地点から3km以内に限定。ユーザーが地図を動かした後は範囲制限を解除する。
+          const withinSearchRadius = mapBrowsingAllPins || !activeSearchLocation || (hasCoords &&
             distanceMeters(activeSearchLocation.lat, activeSearchLocation.lng, lat, lng) <= SEARCH_RADIUS_METERS);
           if (hasCoords && withinSearchRadius && bounds.contains([lat,lng])) {
             const marker = store.primary ? L.marker([lat,lng]) : L.marker([lat,lng], {icon:new L.Icon.Default({className:'other-store-red-pin'})});
@@ -837,6 +847,7 @@
       hasSearched = true;
       visiblePostCount = PAGE_SIZE;
       activeSearchLocation = null;
+      mapBrowsingAllPins = false;
 
       const button = $('runSearch');
       button.disabled = true;
@@ -893,7 +904,7 @@
     $('clearSearch').addEventListener('click',()=>{
       $('search').value='';$('countryFilter').value='';$('visitedFilter').value='';
       $('eatenFilter').value='';$('venueEatenFilter').value='';$('sort').value='';
-      activeSearchLocation=null;hasSearched=false;visiblePostCount=PAGE_SIZE;
+      activeSearchLocation=null;hasSearched=false;visiblePostCount=PAGE_SIZE;mapBrowsingAllPins=false;
       map.setView([36.2048, 138.2529], 5);
       render();
     });
