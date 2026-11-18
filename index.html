@@ -54,7 +54,7 @@
     .personal-checks{display:grid;gap:7px;margin-top:10px;padding:9px;background:#f4faf6;border-radius:10px}.personal-checks label{display:flex;align-items:center;gap:8px;font-size:13px;cursor:pointer}.personal-checks input{width:18px;height:18px;accent-color:var(--green)}
     .popup-personal-checks{display:flex;flex-wrap:nowrap;align-items:center;justify-content:space-between;gap:5px;padding:7px 5px}.popup-personal-checks label{display:flex;align-items:center;gap:3px;font-size:11px;white-space:nowrap;min-width:0}.popup-personal-checks input{width:15px;height:15px;flex:0 0 15px}
     @media(max-width:380px){.popup-personal-checks{gap:3px;padding:7px 3px}.popup-personal-checks label{font-size:10px;gap:2px}.popup-personal-checks input{width:13px;height:13px;flex-basis:13px}}
-    .rank-panel{border:1px solid #e5d39a;background:#fff9e8;border-radius:12px;padding:10px 12px;margin-bottom:8px}.rank-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rank-label{font-size:12px;color:#805a13;white-space:nowrap}.rank-title{font-weight:800;font-size:15px}.rank-progress{height:8px;background:#eadfbf;border-radius:99px;overflow:hidden;margin:8px 0}.rank-progress span{display:block;height:100%;background:#c58b25;width:0;transition:width .3s}.venue-count-line{display:flex;align-items:center;gap:10px;padding:7px 12px;margin:0 0 8px;color:#555;font-size:14px}.venue-count-line strong{font-size:15px;color:#805a13}.toast{white-space:pre-line;position:fixed;left:50%;top:14%;transform:translate(-50%,-18px) scale(.82);z-index:11000;background:linear-gradient(135deg,#fff9d7,#ffe7a8,#fff);border:3px solid #e5bd4d;color:#805a13;padding:28px 34px;border-radius:24px;box-shadow:0 16px 55px #0004;text-align:center;font-weight:900;font-size:clamp(22px,5vw,34px);line-height:1.35;max-width:min(92vw,560px);width:max-content;opacity:0;pointer-events:none;transition:opacity .3s,transform .35s cubic-bezier(.2,1.4,.4,1);text-shadow:0 1px #fff}.toast.show{opacity:1;transform:translate(-50%,0) scale(1)}.toast.celebrate{animation:toast-glow 1s ease-in-out infinite alternate}.toast.celebrate::after{content:'✨ 🎉 ✨';display:block;font-size:clamp(22px,5vw,32px);margin-top:10px}@keyframes toast-glow{from{box-shadow:0 12px 35px #e7b83c66,0 0 0 0 #f8d66a00}to{box-shadow:0 16px 55px #e7b83caa,0 0 0 8px #f8d66a33}}@media(max-width:480px){.toast{padding:23px 22px;border-radius:20px}}
+    .rank-panel{border:1px solid #e5d39a;background:#fff9e8;border-radius:12px;padding:10px 12px;margin-bottom:8px}.rank-heading{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.rank-label{font-size:12px;color:#805a13;white-space:nowrap}.rank-title{font-weight:800;font-size:15px}.rank-progress{height:8px;background:#eadfbf;border-radius:99px;overflow:hidden;margin:8px 0}.rank-progress span{display:block;height:100%;background:#c58b25;width:0;transition:width .3s}.venue-count-line{display:flex;align-items:center;gap:10px;padding:7px 12px;margin:0 0 8px;color:#555;font-size:14px}.venue-count-line strong{font-size:15px;color:#805a13}.title-card-action{display:flex;justify-content:center;margin:12px 0 2px}.title-card-action button{width:100%;max-width:360px;padding:13px 18px;border-radius:12px;background:linear-gradient(135deg,#147d58,#2da777);box-shadow:0 3px 10px #147d5826}.toast{white-space:pre-line;position:fixed;left:50%;top:14%;transform:translate(-50%,-18px) scale(.82);z-index:11000;background:linear-gradient(135deg,#fff9d7,#ffe7a8,#fff);border:3px solid #e5bd4d;color:#805a13;padding:28px 34px;border-radius:24px;box-shadow:0 16px 55px #0004;text-align:center;font-weight:900;font-size:clamp(22px,5vw,34px);line-height:1.35;max-width:min(92vw,560px);width:max-content;opacity:0;pointer-events:none;transition:opacity .3s,transform .35s cubic-bezier(.2,1.4,.4,1);text-shadow:0 1px #fff}.toast.show{opacity:1;transform:translate(-50%,0) scale(1)}.toast.celebrate{animation:toast-glow 1s ease-in-out infinite alternate}.toast.celebrate::after{content:'✨ 🎉 ✨';display:block;font-size:clamp(22px,5vw,32px);margin-top:10px}@keyframes toast-glow{from{box-shadow:0 12px 35px #e7b83c66,0 0 0 0 #f8d66a00}to{box-shadow:0 16px 55px #e7b83caa,0 0 0 8px #f8d66a33}}@media(max-width:480px){.toast{padding:23px 22px;border-radius:20px}}
     .entry-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap}
     .entry-actions button{padding:8px 11px;font-size:12px}
     .entry-actions.reaction-row{display:flex;gap:5px;flex-wrap:nowrap;align-items:center}
@@ -99,6 +99,7 @@
       <div class="rank-panel"><div class="rank-heading"><div class="rank-label">🏠 行ったの称号</div><div id="visitedRank" class="rank-title">🍴 グルメ探検隊</div><div id="visitedCount" class="hint">0件チェック</div></div><div class="rank-progress"><span id="visitedProgress"></span></div><div id="visitedNext" class="hint"></div></div>
       <div class="rank-panel"><div class="rank-heading"><div class="rank-label">🍴 食べたの称号</div><div id="eatenRank" class="rank-title">🍴 グルメ探検隊</div><div id="eatenCount" class="hint">0件チェック</div></div><div class="rank-progress"><span id="eatenProgress"></span></div><div id="eatenNext" class="hint"></div></div>
       <div class="venue-count-line"><span>🎪 会場で食べた</span><strong id="venueEatenCount">0件</strong></div>
+      <div class="title-card-action"><button id="saveTitleCardBtn" type="button">🏅 称号カードを画像保存</button></div>
     </section>
     <section class="panel map-panel">
       <div class="map-tools">
@@ -268,6 +269,64 @@
       ranksInitialized = true;
       const venueCount=records.filter(r=>isChecked(r.id,'venueEaten')).length;
       $('venueEatenCount').textContent=`${venueCount}件`;
+    }
+
+
+    // 現在の称号・チェック数を1枚の画像カードにして保存する。
+    function saveTitleCardImage() {
+      const canvas = document.createElement('canvas');
+      canvas.width = 1080; canvas.height = 1350;
+      const ctx = canvas.getContext('2d');
+      const rounded = (x,y,w,h,r,fill,stroke=null,lineWidth=1) => {
+        ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fillStyle=fill; ctx.fill();
+        if (stroke) { ctx.lineWidth=lineWidth; ctx.strokeStyle=stroke; ctx.stroke(); }
+      };
+      const text = (value,x,y,size,color,weight='600',align='left') => {
+        ctx.font = `${weight} ${size}px -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif`;
+        ctx.fillStyle=color; ctx.textAlign=align; ctx.textBaseline='middle'; ctx.fillText(value,x,y);
+      };
+      const visited = records.filter(r=>isChecked(r.id,'visited')).length;
+      const eaten = records.filter(r=>isChecked(r.id,'eaten')).length;
+      const total = records.length;
+      const venue = records.filter(r=>isChecked(r.id,'venueEaten')).length;
+      const rankInfo = (count) => {
+        const rank=highestRank(count);
+        const allDone=total>0 && count===total;
+        const next=rankLevels.find(x=>x.n>count);
+        return {title:allDone?'🌈 万博グルメミソロジー':rank.title, next:allDone?'全投稿制覇！':next?`次の称号まであと${next.n-count}件`:'50件達成！', progress:Math.min(1,count/Math.max(1,next?next.n:(total||count||1)))};
+      };
+      const v=rankInfo(visited), e=rankInfo(eaten);
+      const bg=ctx.createLinearGradient(0,0,1080,1350); bg.addColorStop(0,'#0f684b'); bg.addColorStop(1,'#2da777');
+      ctx.fillStyle=bg; ctx.fillRect(0,0,1080,1350);
+      // 背景の控えめな装飾
+      ctx.globalAlpha=.12; ctx.fillStyle='#ffffff';
+      for(let i=0;i<9;i++){ctx.beginPath();ctx.arc(90+i*135,90+(i%3)*35,22+(i%2)*12,0,Math.PI*2);ctx.fill();}
+      ctx.globalAlpha=1;
+      text('EXPO2025 FOOD COMMUNITY MAP',70,95,30,'#e7fff3','700');
+      text('🍽️ アフター万博グルメMAP',70,180,54,'#ffffff','800');
+      text('MY GOURMET TITLE CARD',72,238,23,'#d7f5e6','700');
+      rounded(48,300,984,790,34,'#fffdf5','#e8d9aa',3);
+      const drawRank=(y,label,icon,info,count)=>{
+        rounded(86,y,908,300,24,'#fff9e8','#e5d39a',3);
+        text(label,126,y+55,30,'#805a13','700');
+        text(icon+' '+info.title,126,y+128,43,'#19342b','800');
+        text(`${count}件チェック / 全${total}投稿`,126,y+190,27,'#63776e','600');
+        rounded(126,y+230,828,18,9,'#eadfbf');
+        rounded(126,y+230,828*info.progress,18,9,'#c58b25');
+        text(info.next,126,y+275,23,'#63776e','600');
+      };
+      drawRank(340,'🏠 行ったの称号','🏡',v,visited);
+      drawRank(700,'🍴 食べたの称号','🍴',e,eaten);
+      text(`🎪 会場で食べた  ${venue}件`,90,1170,31,'#ffffff','700');
+      text('万博グルメの思い出を、これからも記録に。',540,1250,25,'#e7fff3','600','center');
+      text(new Date().toLocaleDateString('ja-JP'),540,1300,20,'#d7f5e6','500','center');
+      canvas.toBlob(blob=>{
+        if(!blob){window.alert('画像を作成できませんでした。もう一度お試しください。');return;}
+        const url=URL.createObjectURL(blob);
+        const a=document.createElement('a'); a.href=url; a.download='アフター万博グルメMAP_称号カード.png';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(url),1500);
+      },'image/png');
     }
 
 
@@ -687,6 +746,7 @@
     // 地図ピンのポップアップ内の操作も、投稿一覧と同じ処理で受け付けます。
     map.getContainer().addEventListener('click', handleEntryAction);
     $('loadMoreBtn').addEventListener('click', () => { visiblePostCount += PAGE_SIZE; render(); });
+    $('saveTitleCardBtn').addEventListener('click', saveTitleCardImage);
     function distanceMeters(lat1, lng1, lat2, lng2) {
       const rad = value => value * Math.PI / 180;
       const dLat = rad(lat2 - lat1), dLng = rad(lng2 - lng1);
