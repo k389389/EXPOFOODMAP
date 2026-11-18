@@ -302,24 +302,24 @@
       ctx.globalAlpha=.12; ctx.fillStyle='#ffffff';
       for(let i=0;i<9;i++){ctx.beginPath();ctx.arc(90+i*135,90+(i%3)*35,22+(i%2)*12,0,Math.PI*2);ctx.fill();}
       ctx.globalAlpha=1;
-      text('EXPO2025 FOOD COMMUNITY MAP',70,95,30,'#e7fff3','700');
-      text('🍽️ アフター万博グルメMAP',70,180,54,'#ffffff','800');
-      text('MY GOURMET TITLE CARD',72,238,23,'#d7f5e6','700');
+      text('EXPO2025 FOOD COMMUNITY MAP',70,95,35,'#e7fff3','700');
+      text('🍽️ アフター万博グルメMAP',70,180,60,'#ffffff','800');
+      text('MY GOURMET TITLE CARD',72,238,28,'#d7f5e6','700');
       rounded(48,300,984,790,34,'#fffdf5','#e8d9aa',3);
       const drawRank=(y,label,icon,info,count)=>{
         rounded(86,y,908,300,24,'#fff9e8','#e5d39a',3);
-        text(label,126,y+55,30,'#805a13','700');
-        text(icon+' '+info.title,126,y+128,43,'#19342b','800');
-        text(`${count}件チェック / 全${total}投稿`,126,y+190,27,'#63776e','600');
+        text(label,126,y+55,36,'#805a13','700');
+        text(icon+' '+info.title,126,y+128,50,'#19342b','800');
+        text(`${count}件チェック / 全${total}投稿`,126,y+190,32,'#63776e','600');
         rounded(126,y+230,828,18,9,'#eadfbf');
         rounded(126,y+230,828*info.progress,18,9,'#c58b25');
-        text(info.next,126,y+275,23,'#63776e','600');
+        text(info.next,126,y+275,28,'#63776e','600');
       };
       drawRank(340,'🏠 行ったの称号','🏡',v,visited);
       drawRank(700,'🍴 食べたの称号','🍴',e,eaten);
-      text(`🎪 会場で食べた  ${venue}件`,90,1170,31,'#ffffff','700');
-      text('万博グルメの思い出を、これからも記録に。',540,1250,25,'#e7fff3','600','center');
-      text(new Date().toLocaleDateString('ja-JP'),540,1300,20,'#d7f5e6','500','center');
+      text(`🎪 会場で食べた  ${venue}件`,90,1170,37,'#ffffff','700');
+      text('万博グルメの思い出を、これからも記録に。',540,1250,30,'#e7fff3','600','center');
+      text(new Date().toLocaleDateString('ja-JP'),540,1300,24,'#d7f5e6','500','center');
       canvas.toBlob(blob=>{
         if(!blob){window.alert('画像を作成できませんでした。もう一度お試しください。');return;}
         const url=URL.createObjectURL(blob);
