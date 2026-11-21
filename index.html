@@ -76,6 +76,9 @@
     .error{color:#b42318!important}
     footer{text-align:center;color:var(--muted);font-size:12px;padding:6px 16px 26px;line-height:1.6}
     .leaflet-popup-content{line-height:1.55}.leaflet-popup-content .popup-reaction-row{flex-wrap:wrap;gap:5px;margin-top:8px}.leaflet-popup-content .popup-reaction-row button{padding:6px 7px;font-size:11px}.entry .dish-name{margin-top:-8px;font-size:14px;color:var(--muted)}
+    .notice-panel{grid-column:1/-1;border-color:#cfe6d8;background:#fbfffc}
+    .notice-item{padding:10px 0;border-bottom:1px solid var(--line)}.notice-item:last-child{border-bottom:0}.notice-date{font-size:12px;color:var(--muted);margin-bottom:3px}.notice-title{font-weight:800;margin-bottom:4px}.notice-body{font-size:14px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}.notice-link{display:inline-block;margin-top:5px;font-size:13px;color:var(--green);overflow-wrap:anywhere}
+    .notice-admin-tools{display:flex;gap:8px;justify-content:flex-end;margin-top:10px}.notice-admin-panel{margin-top:12px;padding:12px;border:1px dashed #9fc9ae;border-radius:12px;background:#f3faf5}.notice-admin-panel[hidden]{display:none}.notice-admin-panel .field{margin-bottom:10px}.notice-admin-panel button{margin:4px 4px 0 0}.notice-admin-list{font-size:13px;line-height:1.5;margin:10px 0}
     .other-store-red-pin{filter:hue-rotate(145deg) saturate(2.2)}
     .picker-modal{position:fixed;inset:0;background:#10281fd9;z-index:10000;display:none;align-items:center;justify-content:center;padding:12px}
     .picker-card{background:#fff;border-radius:18px;padding:14px;width:min(100%,760px);max-height:96dvh;overflow:auto}
@@ -94,6 +97,23 @@
     <p>万博グルメの思い出を記録に残そう！
 <br><small>※記録はブラウザに保存されます。</small></p>
   </div></header>
+  <section id="noticePanel" class="panel notice-panel" hidden style="max-width:1068px;margin:16px auto 0;width:calc(100% - 32px)">
+    <h2 class="section-title">📢 お知らせ</h2>
+    <div id="noticeList"><p class="hint" style="margin:0">現在、お知らせはありません。</p></div>
+    <div class="notice-admin-tools"><button id="noticeAdminToggle" class="outline" type="button" hidden>⚙️ お知らせ管理</button></div>
+    <div id="noticeAdminPanel" class="notice-admin-panel" hidden>
+      <strong>お知らせを追加</strong>
+      <form id="noticeForm" style="margin-top:10px">
+        <div class="field"><label for="noticeTitle">見出し *</label><input id="noticeTitle" maxlength="100" required placeholder="例：〇〇店 オープン予定"></div>
+        <div class="field"><label for="noticeBody">お知らせ内容</label><textarea id="noticeBody" rows="3" maxlength="600" placeholder="例：〇月〇日にオープン予定です。"></textarea></div>
+        <div class="field"><label for="noticeUrl">関連URL（任意）</label><input id="noticeUrl" type="url" maxlength="500" placeholder="https://..."></div>
+        <button type="submit">お知らせを追加</button>
+      </form>
+      <div id="noticeAdminList" class="notice-admin-list"></div>
+      <button id="downloadNoticeHtml" type="button">更新したHTMLを保存</button>
+      <p class="hint" style="margin-bottom:0">保存したHTMLをGitHubにアップロードすると、全員にお知らせが共有されます。ここでの追加だけでは、まだ他の人には反映されません。</p>
+    </div>
+  </section>
   <main>
     <section class="panel" style="grid-column:1/-1">
       <div class="rank-panel"><div class="rank-heading"><div class="rank-label">🏠 行ったの称号</div><div id="visitedRank" class="rank-title">🍴 グルメ探検隊</div><div id="visitedCount" class="hint">0件チェック</div></div><div class="rank-progress"><span id="visitedProgress"></span></div><div id="visitedNext" class="hint"></div></div>
@@ -177,6 +197,10 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
   <script>
+    // お知らせデータ：管理画面で更新HTMLを保存すると、この部分が書き換わります。
+    /* NOTICE_DATA_START */
+    const NOTICE_DATA = [];
+    /* NOTICE_DATA_END */
     // ===== 公開前に設定してください =====
     // 1) Firebase ConsoleでWebアプリを作成し、firebaseConfigを貼り付け
     // 2) RTDBを作成し、Database URLを確認
@@ -331,6 +355,91 @@
 
 
     const $ = id => document.getElementById(id);
+    // ===== お知らせ表示・管理（HTMLを書き出して手動公開） =====
+    const ADMIN_BROWSER_KEY = 'expofoodmap-notice-admin-browser-v1';
+    let noticeDrafts = Array.isArray(NOTICE_DATA) ? NOTICE_DATA.map(n => ({...n})) : [];
+    function safeNoticeUrl(value) {
+      if (!String(value || '').trim()) return '';
+      try { const u = new URL(String(value).trim()); return ['http:','https:'].includes(u.protocol) ? u.href : ''; }
+      catch { return ''; }
+    }
+    function renderNotices() {
+      const isAdminBrowser = localStorage.getItem(ADMIN_BROWSER_KEY) === 'yes';
+      // お知らせが0件なら一般閲覧者にはセクションごと表示しない。管理ブラウザでは投稿できるよう表示する。
+      $('noticePanel').hidden = noticeDrafts.length === 0 && !isAdminBrowser;
+      const list = $('noticeList');
+      if (!noticeDrafts.length) list.innerHTML = '<p class="hint" style="margin:0">現在、お知らせはありません。</p>';
+      else list.innerHTML = noticeDrafts.map((n, i) => {
+        const url = safeNoticeUrl(n.url);
+        return `<article class="notice-item"><div class="notice-date">${esc(n.date || '')}</div><div class="notice-title">${esc(n.title || '')}</div>${n.body ? `<div class="notice-body">${esc(n.body)}</div>` : ''}${url ? `<a class="notice-link" href="${esc(url)}" target="_blank" rel="noopener noreferrer">関連ページを見る ↗</a>` : ''}</article>`;
+      }).join('');
+      if ($('noticeAdminList')) $('noticeAdminList').innerHTML = noticeDrafts.length
+        ? '登録中：' + noticeDrafts.map((n,i)=>`${i+1}. ${esc(n.title)} <button class="outline" type="button" data-notice-delete="${i}">削除</button>`).join('<br>')
+        : '登録中のお知らせはありません。';
+    }
+    function enableNoticeAdminOnThisBrowser() {
+      localStorage.setItem(ADMIN_BROWSER_KEY, 'yes');
+      $('noticeAdminToggle').hidden = false;
+      renderNotices();
+      alert('このブラウザを管理用として登録しました。次回からもこのブラウザで管理ボタンが表示されます。');
+    }
+    if (localStorage.getItem(ADMIN_BROWSER_KEY) === 'yes') $('noticeAdminToggle').hidden = false;
+    $('noticeAdminToggle').addEventListener('click', () => {
+      $('noticeAdminPanel').hidden = !$('noticeAdminPanel').hidden;
+      if (!$('noticeAdminPanel').hidden) renderNotices();
+    });
+    $('noticeForm').addEventListener('submit', event => {
+      event.preventDefault();
+      const title = $('noticeTitle').value.trim();
+      const body = $('noticeBody').value.trim();
+      const url = $('noticeUrl').value.trim();
+      if (!title) return;
+      if (url && !safeNoticeUrl(url)) { alert('URLは https:// または http:// から始まるものを入力してください。'); return; }
+      noticeDrafts.unshift({date:new Intl.DateTimeFormat('ja-JP',{year:'numeric',month:'long',day:'numeric'}).format(new Date()), title, body, url});
+      $('noticeForm').reset();
+      renderNotices();
+    });
+    $('noticeAdminList').addEventListener('click', event => {
+      const button = event.target.closest('[data-notice-delete]');
+      if (!button) return;
+      const index = Number(button.dataset.noticeDelete);
+      if (Number.isInteger(index) && confirm('このお知らせを削除しますか？')) { noticeDrafts.splice(index,1); renderNotices(); }
+    });
+    $('downloadNoticeHtml').addEventListener('click', async () => {
+      const button = $('downloadNoticeHtml');
+      button.disabled = true; button.textContent = 'HTMLを準備中…';
+      try {
+        const response = await fetch(location.href, {cache:'no-store'});
+        if (!response.ok) throw new Error('ページを取得できませんでした');
+        let html = await response.text();
+        const data = JSON.stringify(noticeDrafts).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
+        const pattern = /\/\* NOTICE_DATA_START \*\/[\s\S]*?\/\* NOTICE_DATA_END \*\//;
+        if (!pattern.test(html)) throw new Error('お知らせデータの書き込み場所が見つかりません');
+        html = html.replace(pattern, '/* NOTICE_DATA_START */\n    const NOTICE_DATA = ' + data + ';\n    /* NOTICE_DATA_END */');
+        const blob = new Blob([html], {type:'text/html;charset=utf-8'});
+        const objectUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = objectUrl;
+        const pathName = location.pathname.split('/').filter(Boolean).pop() || 'index.html';
+        a.download = pathName.toLowerCase().endsWith('.html') ? pathName : 'index.html';
+        document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(objectUrl);
+        alert('更新したHTMLを保存しました。GitHubの同じ場所にアップロードしてください。');
+      } catch (error) {
+        alert('HTMLを保存できませんでした。GitHub Pagesで公開中のページから操作してください。\n' + error.message);
+      } finally { button.disabled = false; button.textContent = '更新したHTMLを保存'; }
+    });
+    // ヘッダーのタイトルを7回タップすると、このブラウザだけを管理用として登録できます。
+    // これは管理ボタンを隠すための簡易機能であり、本人確認や強固な認証ではありません。
+    let adminTapCount = 0, adminTapTimer = null;
+    document.querySelector('header h1').addEventListener('click', () => {
+      adminTapCount++;
+      clearTimeout(adminTapTimer);
+      adminTapTimer = setTimeout(() => { adminTapCount = 0; }, 2500);
+      if (adminTapCount >= 7) { adminTapCount = 0; enableNoticeAdminOnThisBrowser(); }
+    });
+    // 初期表示は esc 関数の定義後に実行します。
+    // ===== お知らせ管理ここまで =====
+
     const POST_PASSWORD = 'Expo2025foodquizkan';
     function requirePostPassword() {
       const entered = window.prompt('パスワードを入力してください');
@@ -344,6 +453,7 @@
       $('postForm').scrollIntoView({behavior:'smooth', block:'start'});
     }
     const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    renderNotices();
     const hasConfig = () => firebaseConfigured && window.firebase;
     if (hasConfig()) {
       try {
