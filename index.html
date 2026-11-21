@@ -199,7 +199,7 @@
   <script>
     // お知らせデータ：管理画面で更新HTMLを保存すると、この部分が書き換わります。
     /* NOTICE_DATA_START */
-    const NOTICE_DATA = [{"date":"2026年11月21日","title":"HALA（※エキスポクウェートキッチン）","body":"11月28日、大阪の本町でオープン予定です！","url":"https://www.instagram.com/p/Dfrrd5Qn1N0/?hvrq=OTdrZXVldmV5anI4"}];
+    const NOTICE_DATA = [];
     /* NOTICE_DATA_END */
     // ===== 公開前に設定してください =====
     // 1) Firebase ConsoleでWebアプリを作成し、firebaseConfigを貼り付け
@@ -297,12 +297,28 @@
 
 
     // 現在の称号・チェック数を1枚の画像カードにして保存する。
+    // 古いSafari向けにroundRect/toBlob/download属性への依存を避ける。
     function saveTitleCardImage() {
       const canvas = document.createElement('canvas');
       canvas.width = 1080; canvas.height = 1350;
       const ctx = canvas.getContext('2d');
+      if (!ctx) { window.alert('この端末では画像を作成できませんでした。'); return; }
+
+      // CanvasRenderingContext2D.roundRect() 非対応端末でも使える角丸描画。
       const rounded = (x,y,w,h,r,fill,stroke=null,lineWidth=1) => {
-        ctx.beginPath(); ctx.roundRect(x,y,w,h,r); ctx.fillStyle=fill; ctx.fill();
+        const radius = Math.max(0, Math.min(r, w/2, h/2));
+        ctx.beginPath();
+        ctx.moveTo(x + radius, y);
+        ctx.lineTo(x + w - radius, y);
+        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+        ctx.lineTo(x + w, y + h - radius);
+        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+        ctx.lineTo(x + radius, y + h);
+        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+        ctx.lineTo(x, y + radius);
+        ctx.quadraticCurveTo(x, y, x + radius, y);
+        ctx.closePath();
+        ctx.fillStyle=fill; ctx.fill();
         if (stroke) { ctx.lineWidth=lineWidth; ctx.strokeStyle=stroke; ctx.stroke(); }
       };
       const text = (value,x,y,size,color,weight='600',align='left') => {
@@ -344,15 +360,42 @@
       text(`🎪 会場で食べた  ${venue}件`,90,1170,37,'#ffffff','700');
       text('万博グルメの思い出を、これからも記録に。',540,1250,30,'#e7fff3','600','center');
       text(new Date().toLocaleDateString('ja-JP'),540,1300,24,'#d7f5e6','500','center');
-      canvas.toBlob(blob=>{
-        if(!blob){window.alert('画像を作成できませんでした。もう一度お試しください。');return;}
-        const url=URL.createObjectURL(blob);
-        const a=document.createElement('a'); a.href=url; a.download='アフター万博グルメMAP_称号カード.png';
-        document.body.appendChild(a); a.click(); a.remove();
-        setTimeout(()=>URL.revokeObjectURL(url),1500);
-      },'image/png');
-    }
 
+      // iPhone/iPad Safariでは download 属性が動作しない場合があるため、
+      // 画像を別画面で開き、長押しして写真に保存できるようにする。
+      const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+      if (isIOS) {
+        try {
+          const dataUrl = canvas.toDataURL('image/png');
+          const opened = window.open(dataUrl, '_blank');
+          if (!opened) {
+            window.alert('画像を開けませんでした。Safariのポップアップブロックを一時的に解除して、もう一度お試しください。');
+          }
+        } catch (err) {
+          window.alert('画像を作成できませんでした。Safariを最新版にして再度お試しください。');
+        }
+        return;
+      }
+
+      if (typeof canvas.toBlob === 'function') {
+        canvas.toBlob(blob=>{
+          if(!blob){window.alert('画像を作成できませんでした。もう一度お試しください。');return;}
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement('a'); a.href=url; a.download='アフター万博グルメMAP_称号カード.png';
+          document.body.appendChild(a); a.click(); a.remove();
+          setTimeout(()=>URL.revokeObjectURL(url),1500);
+        },'image/png');
+      } else {
+        try {
+          const dataUrl=canvas.toDataURL('image/png');
+          const a=document.createElement('a'); a.href=dataUrl; a.download='アフター万博グルメMAP_称号カード.png';
+          document.body.appendChild(a); a.click(); a.remove();
+        } catch (err) {
+          window.alert('画像を保存できませんでした。');
+        }
+      }
+    }
 
     const $ = id => document.getElementById(id);
     // ===== お知らせ表示・管理（HTMLを書き出して手動公開） =====
